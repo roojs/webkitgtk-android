@@ -42,6 +42,6 @@ ninja -C build-docs docs/valadoc
 
 ## Out of scope
 
-- Snapshot / PDF / capture APIs (Snappr product)
+- Snapshot / PDF / capture APIs
 - Full WebKitGTK feature surface
 - Linux/Windows builds of this library
