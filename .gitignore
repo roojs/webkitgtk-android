@@ -1,8 +1,20 @@
+# Pixiewood / Android build outputs
 .pixiewood/
 .android-sdk/
 .android-tools/
+.android-user/
+.android-user-home/
 build/
-subprojects/*
-!subprojects/.gitkeep
 *.apk
 .flatpak-builder/
+
+# Meson / editor
+.cache/
+*.swp
+*~
+.vscode/
+.idea/
+
+# Subprojects are fetched by meson/pixiewood — keep only the placeholder
+subprojects/*
+!subprojects/.gitkeep
