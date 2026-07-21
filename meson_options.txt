@@ -2,12 +2,19 @@ option(
   'android_hello',
   type: 'boolean',
   value: false,
-  description: 'Build Phase 1 GTK Hello World Android application (Pixiewood)',
+  description: 'Build Phase 1 GTK Hello World Android application (Pixiewood). Skips the shared library (no libsoup in hello Pixiewood).',
 )
 
 option(
   'android_browser',
   type: 'boolean',
   value: false,
-  description: 'Build Phase 2 browser with System WebView embed (Pixiewood)',
+  description: 'Build Phase 2/3 browser example that links libwebkitgtk-android-1 (Pixiewood)',
+)
+
+option(
+  'docs',
+  type: 'boolean',
+  value: false,
+  description: 'Build Valadoc API docs (works on Linux; use to configure off Android)',
 )

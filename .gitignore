@@ -5,6 +5,7 @@
 .android-user/
 .android-user-home/
 build/
+build-docs/
 *.apk
 .flatpak-builder/
 

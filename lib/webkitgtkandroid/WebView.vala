@@ -112,9 +112,9 @@ namespace WebKitGtkAndroid
 	 * Limitation (v0.1): one WebView host per process.
 	 *
 	 * Modal freeze: watches the same toplevel for overlay UI → auto
-	 * {@link refresh_freeze}. Detects GObject type name {@code AdwDialog}
+	 * {@link refresh_freeze}. Detects GObject type name ''AdwDialog''
 	 * (string match up the type hierarchy, no Adwaita link) and transient
-	 * {@link Gtk.Window}. Hooks {@code parent-set} so freeze runs when a dialog
+	 * {@link Gtk.Window}. Hooks ''parent-set'' so freeze runs when a dialog
 	 * is parented — before map/present finishes. Set {@link freeze_manual} and
 	 * call {@link refresh_freeze} for overlay UI the monitor does not see.
 	 */

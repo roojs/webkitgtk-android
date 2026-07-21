@@ -182,17 +182,12 @@ patch_pixiewood_gradle_native_libs() {
 }
 
 install_webview_java() {
-  local dest="$ROOT_DIR/.pixiewood/android/app/src/main/java/org/roojs/webkitgtk/android"
-  local src="$ROOT_DIR/lib/host/java/org/roojs/webkitgtk/android"
-
-  if [ ! -d "$src" ]; then
+  # Browser / library APKs need host Java; hello does not.
+  if [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-hello.xml ]]; then
     return 0
   fi
-  mkdir -p "$dest"
-  # Drop obsolete WakeA11yService if a prior build left it in the tree.
-  rm -f "$dest/WakeA11yService.java"
-  cp -a "$src"/*.java "$dest/"
-  echo "Installed WebViewHost Java into $dest"
+  "$ROOT_DIR/scripts/android/install-webview-java.sh" \
+    "$ROOT_DIR/.pixiewood/android/app/src/main/java"
 }
 
 strip_wake_a11y_service_from_manifest() {
@@ -275,6 +270,15 @@ verify_apk() {
     exit 1
   fi
   echo "Verified $apk contains $so_name"
+  if [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-browser.xml ]]; then
+    if ! grep -q 'lib/arm64-v8a/libwebkitgtk-android-1.so' <<<"$listing" \
+      && ! grep -q 'lib/arm64-v8a/libwebkitgtk-android-1.so.' <<<"$listing"; then
+      echo "APK missing libwebkitgtk-android-1.so (shared library packaging)" >&2
+      grep 'lib/arm64-v8a/' <<<"$listing" >&2 || true
+      exit 1
+    fi
+    echo "Verified $apk contains libwebkitgtk-android-1.so"
+  fi
 }
 
 run_pixiewood_setup() {

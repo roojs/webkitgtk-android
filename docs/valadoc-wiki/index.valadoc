@@ -1,0 +1,12 @@
+== webkitgtk-android API - Package Overview ==
+
+GTK 4 widget embedding Android System WebView (WebKitGTK-shaped subset).
+
+Public namespace:
+
+ * ''WebKitGtkAndroid'' — ''WebView'', cookies, downloads, network session
+
+Host a11y entry points (''wka_host_a11y_*'') live in the checked-in VAPI /
+host header — not as methods on ''WebView'' (same split as webview2-gtk).
+
+Hand-written notes: [[../a11y.md|docs/a11y.md]], [[../android-build.md|docs/android-build.md]].

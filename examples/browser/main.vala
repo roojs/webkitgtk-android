@@ -89,6 +89,7 @@ private void dump_a11y (Gtk.Window? parent)
 {
 	var sb = new StringBuilder ();
 	a11y_node_count = 0;
+	/* Host a11y — same split as webview2-gtk (not methods on WebView). */
 	if (!wka_host_a11y_ensure ()) {
 		print ("a11y ensure failed\n");
 		show_a11y_dialog (parent, "A11y dump", "ensure failed (see logcat WebViewA11y)");

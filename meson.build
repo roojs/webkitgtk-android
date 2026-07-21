@@ -9,8 +9,24 @@ project(
   ],
 )
 
-if host_machine.system() != 'android'
-  error('This project currently builds for Android cross only')
+is_android = host_machine.system() == 'android'
+want_docs = get_option('docs')
+
+if not is_android and not want_docs
+  error('webkitgtk-android builds for Android cross only. Use -Ddocs=true for Valadoc on Linux.')
+endif
+
+if want_docs
+  subdir('docs')
+endif
+
+if not is_android
+  # Docs-only configure (CI / local Valadoc). Library and demos need Android.
+  subdir_done()
+endif
+
+if get_option('android_hello') and get_option('android_browser')
+  error('Pass only one of -Dandroid_hello=true or -Dandroid_browser=true')
 endif
 
 gtk_dep = dependency('gtk4')
@@ -32,22 +48,23 @@ soup_dep = dependency(
     'ntlm=disabled',
   ],
 )
+log_dep = meson.get_compiler('c').find_library('log')
 
-common_deps = [gtk_dep, adw_dep, gio_dep, glib_dep, gobject_dep, soup_dep]
-common_vala_args = [
+lib_deps = [gtk_dep, gio_dep, glib_dep, gobject_dep, soup_dep, log_dep]
+lib_vala_args = [
   '--pkg=gtk4',
-  '--pkg=libadwaita-1',
   '--pkg=gio-2.0',
   '--pkg=glib-2.0',
   '--pkg=gobject-2.0',
   '--pkg=libsoup-3.0',
 ]
 
-if get_option('android_browser')
+# Pure hello APK has no libsoup in Pixiewood — skip the WebView library there.
+build_library = not get_option('android_hello') or get_option('android_browser')
+
+if build_library
   host_inc = include_directories('lib/host')
-  log_dep = meson.get_compiler('c').find_library('log')
-  browser_sources = files(
-    'examples/browser/main.vala',
+  lib_sources = files(
     'lib/webkitgtkandroid/namespace.vala',
     'lib/webkitgtkandroid/CookieManager.vala',
     'lib/webkitgtkandroid/URIRequest.vala',
@@ -60,12 +77,60 @@ if get_option('android_browser')
     'lib/host/webkitgtk-android-cookies.c',
     'lib/host/webkitgtk-android-downloads.c',
   )
+
+  webkitgtk_android_lib = library(
+    'webkitgtk-android-1',
+    lib_sources,
+    dependencies: lib_deps,
+    include_directories: host_inc,
+    vala_args: lib_vala_args,
+    c_args: ['-DANDROID'],
+    vala_header: 'webkitgtk-android.h',
+    vala_vapi: 'webkitgtk-android-1.vapi',
+    install: true,
+  )
+
+  install_headers(
+    'lib/host/webkitgtk-android-host-api.h',
+  )
+
+  # Checked-in VAPI for prefix / wrap consumers. (Pixiewood APK installs often
+  # stage runtime .so only; prefer Meson subproject + override_dependency.)
+  install_data(
+    'vapi/webkitgtk-android-1.vapi',
+    install_dir: get_option('datadir') / 'vala' / 'vapi',
+  )
+
+  pkg = import('pkgconfig')
+  pkg.generate(
+    webkitgtk_android_lib,
+    name: 'webkitgtk-android-1',
+    description: 'GTK 4 widget embedding Android System WebView (WebKitGTK-shaped)',
+    filebase: 'webkitgtk-android-1',
+    requires: ['gtk4', 'libsoup-3.0', 'glib-2.0', 'gobject-2.0', 'gio-2.0'],
+    libraries: [log_dep],
+    variables: [
+      'vapidir=${datadir}/vala/vapi',
+    ],
+  )
+
+  webkitgtk_android_dep = declare_dependency(
+    link_with: webkitgtk_android_lib,
+    include_directories: host_inc,
+    dependencies: lib_deps,
+  )
+  meson.override_dependency('webkitgtk-android-1', webkitgtk_android_dep)
+endif
+
+if get_option('android_browser')
   executable(
     'webkitgtk-android-browser',
-    browser_sources,
-    dependencies: common_deps + [log_dep],
-    include_directories: host_inc,
-    vala_args: common_vala_args,
+    files(
+      'examples/browser/main.vala',
+      'examples/browser/host-a11y.vala',
+    ),
+    dependencies: [webkitgtk_android_dep, adw_dep],
+    vala_args: lib_vala_args + ['--pkg=libadwaita-1'],
     c_args: ['-DANDROID'],
     android_exe_type: 'application',
     install: true,
@@ -75,12 +140,16 @@ elif get_option('android_hello')
   executable(
     'webkitgtk-android-hello',
     files('examples/hello/main.vala'),
-    dependencies: common_deps,
-    vala_args: common_vala_args,
+    dependencies: [gtk_dep, adw_dep, gio_dep, glib_dep, gobject_dep],
+    vala_args: [
+      '--pkg=gtk4',
+      '--pkg=libadwaita-1',
+      '--pkg=gio-2.0',
+      '--pkg=glib-2.0',
+      '--pkg=gobject-2.0',
+    ],
     android_exe_type: 'application',
     install: true,
     install_dir: get_option('libdir'),
   )
-else
-  error('Pass -Dandroid_browser=true (Phase 2) or -Dandroid_hello=true (Phase 1)')
 endif

@@ -19,9 +19,20 @@ web.load_uri ("https://roojs.com/");
 
 ## Status
 
-**Phase 1 ✔️** — GTK Hello World APK builds (await device **✅**). Next: Phase 2 embed.
+- **Phase 1 ✅** — GTK Hello World APK
+- **Phase 2 ✅** — WebView embed + display
+- **Phase 3 ✔️** — a11y dump / fill / press (await device **✅**)
+- **Downloads ✔️** — engine API (see [`docs/plans/1.1-downloads.md`](docs/plans/1.1-downloads.md))
+- **Packaging ✔️** — `libwebkitgtk-android-1` + pkg-config / VAPI (see [`docs/android-build.md`](docs/android-build.md))
 
-See [`docs/plans/1.0-ACTIVE-webkitgtk-android.md`](docs/plans/1.0-ACTIVE-webkitgtk-android.md) and [`docs/android-build.md`](docs/android-build.md).
+### Valadoc (Linux)
+
+```bash
+./scripts/android/ensure-meson.sh   # if host meson < 1.8
+meson setup build-docs -Ddocs=true
+ninja -C build-docs docs/valadoc
+# → build-docs/valadoc/index.html
+```
 
 ## Related
 
