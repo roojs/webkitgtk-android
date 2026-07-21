@@ -20,29 +20,6 @@ extern bool wka_host_add_cookie (
 
 namespace WebKitGtkAndroid
 {
-	public enum CookieAcceptPolicy
-	{
-		ALWAYS,
-		NEVER,
-		NO_THIRD_PARTY
-	}
-
-	public enum CookiePersistentStorage
-	{
-		TEXT,
-		SQLITE
-	}
-
-	/** WebKitGTK-shaped subset — used by cookie / network failures. */
-	public errordomain NetworkError
-	{
-		FAILED,
-		TRANSPORT,
-		UNKNOWN_PROTOCOL,
-		CANCELLED,
-		FILE_DOES_NOT_EXIST
-	}
-
 	/**
 	 * Cookie jar for the embedded WebView (android.webkit.CookieManager).
 	 * Shape matches webview2-gtk / WebKitGTK CookieManager for OLLMchat site_cookies.
@@ -118,20 +95,6 @@ namespace WebKitGtkAndroid
 				throw new NetworkError.FAILED ("add_cookie failed");
 			}
 			return true;
-		}
-	}
-
-	/**
-	 * WebKitGTK-shaped network session — cookie manager today;
-	 * download_started later (see docs/plans/1.1-downloads.md).
-	 */
-	public class NetworkSession : GLib.Object
-	{
-		private CookieManager _cookie_manager = new CookieManager ();
-
-		public CookieManager get_cookie_manager ()
-		{
-			return this._cookie_manager;
 		}
 	}
 }

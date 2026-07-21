@@ -103,6 +103,27 @@ gboolean wka_host_add_cookie (const char *name,
                               gboolean http_only,
                               gboolean secure);
 
+/* ---- Downloads (DownloadListener + HttpURLConnection; WebKit-shaped Vala) ---- */
+typedef void (*WkaDownloadStartedCb) (int id,
+                                      const char *uri,
+                                      const char *suggested_filename,
+                                      const char *mime_type,
+                                      gint64 content_length,
+                                      gpointer user_data);
+typedef void (*WkaDownloadProgressCb) (int id, guint64 received, gpointer user_data);
+typedef void (*WkaDownloadFinishedCb) (int id, gpointer user_data);
+typedef void (*WkaDownloadFailedCb) (int id, const char *message, gpointer user_data);
+
+void wka_host_set_download_handlers (WkaDownloadStartedCb started,
+                                     WkaDownloadProgressCb progress,
+                                     WkaDownloadFinishedCb finished,
+                                     WkaDownloadFailedCb failed,
+                                     gpointer user_data);
+/* Tool path: allocate job id (no listener). Returns 0 on failure. */
+int wka_host_download_create (const char *uri);
+gboolean wka_host_download_start (int id, const char *dest_path, gboolean overwrite);
+void wka_host_download_cancel (int id);
+
 G_END_DECLS
 
 #endif /* WEBKITGTK_ANDROID_HOST_API_H */

@@ -107,17 +107,6 @@ extern bool wka_host_resume ();
 namespace WebKitGtkAndroid
 {
 	/**
-	 * Load lifecycle events — same names and order as WebKit.LoadEvent.
-	 */
-	public enum LoadEvent
-	{
-		STARTED,
-		REDIRECTED,
-		COMMITTED,
-		FINISHED
-	}
-
-	/**
 	 * Embeds Android System WebView over the GTK Android surface.
 	 *
 	 * Limitation (v0.1): one WebView host per process.
@@ -417,11 +406,37 @@ namespace WebKitGtkAndroid
 		}
 
 		/**
-		 * WebKitGTK-shaped network session (cookie manager).
+		 * WebKitGTK-shaped network session (cookies + downloads).
 		 */
 		public NetworkSession get_network_session ()
 		{
 			return this.network_session;
+		}
+
+		/**
+		 * Start a download of ''uri'' using the WebView cookie jar.
+		 * Emits {@link NetworkSession.download_started} then {@link Download.decide_destination}.
+		 */
+		public Download download_uri (string uri)
+		{
+			var trimmed = uri.strip ();
+			var id = wka_host_download_create (trimmed);
+			var suggested = "download";
+			try {
+				var parsed = GLib.Uri.parse (trimmed, GLib.UriFlags.NONE);
+				var path = parsed.get_path ();
+				if (path != null && path != "" && path != "/") {
+					var leaf = GLib.Path.get_basename (path);
+					if (leaf != "" && leaf != "/" && leaf != ".") {
+						suggested = leaf;
+					}
+				}
+			} catch (GLib.Error e) {
+			}
+			var dl = new Download (this.network_session, id, trimmed, suggested, "", -1);
+			this.network_session.register_download (dl, id);
+			this.network_session.emit_download_started (dl);
+			return dl;
 		}
 
 		public void load_uri (string uri)

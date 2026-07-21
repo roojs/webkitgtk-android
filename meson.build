@@ -48,12 +48,17 @@ if get_option('android_browser')
   log_dep = meson.get_compiler('c').find_library('log')
   browser_sources = files(
     'examples/browser/main.vala',
-    'lib/webkitgtkandroid/webview.vala',
-    'lib/webkitgtkandroid/network-session.vala',
+    'lib/webkitgtkandroid/namespace.vala',
+    'lib/webkitgtkandroid/CookieManager.vala',
+    'lib/webkitgtkandroid/URIRequest.vala',
+    'lib/webkitgtkandroid/Download.vala',
+    'lib/webkitgtkandroid/NetworkSession.vala',
+    'lib/webkitgtkandroid/WebView.vala',
     'lib/host/webkitgtk-android-host.c',
     'lib/host/webkitgtk-android-bounds.c',
     'lib/host/webkitgtk-android-a11y.c',
     'lib/host/webkitgtk-android-cookies.c',
+    'lib/host/webkitgtk-android-downloads.c',
   )
   executable(
     'webkitgtk-android-browser',

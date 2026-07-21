@@ -145,6 +145,7 @@ public class BrowserApplication : Adw.Application
 		};
 		var go_btn = new Gtk.Button.with_label ("Go");
 		var a11y_btn = new Gtk.Button.with_label ("Dump a11y");
+		var dl_btn = new Gtk.Button.with_label ("Download");
 
 		web = new WebView ();
 		web.set_hexpand (true);
@@ -155,6 +156,33 @@ public class BrowserApplication : Adw.Application
 			if (ev == LoadEvent.COMMITTED || ev == LoadEvent.FINISHED) {
 				sync_url_entry ();
 			}
+		});
+		web.get_network_session ().download_started.connect ((download) => {
+			download.decide_destination.connect ((suggested) => {
+				var name = suggested != null && suggested != "" ? suggested : "download";
+				var dir = GLib.Environment.get_user_special_dir (GLib.UserDirectory.DOWNLOAD);
+				if (dir == null || dir == "") {
+					dir = GLib.Environment.get_tmp_dir ();
+				}
+				var dest = GLib.Path.build_filename (dir, name);
+				print ("download decide → %s\n", dest);
+				download.set_allow_overwrite (true);
+				download.set_destination (dest);
+				return true;
+			});
+			download.received_data.connect (() => {
+				print ("download progress %s bytes=%llu\n",
+					download.get_uri (),
+					download.get_received_data_length ());
+			});
+			download.finished.connect (() => {
+				print ("download finished %s\n", download.get_uri ());
+				show_a11y_dialog (window, "Download", "Finished:\n" + download.get_uri ());
+			});
+			download.failed.connect ((err) => {
+				print ("download failed: %s\n", err.message);
+				show_a11y_dialog (window, "Download failed", err.message);
+			});
 		});
 
 		back_btn.clicked.connect (() => {
@@ -177,6 +205,14 @@ public class BrowserApplication : Adw.Application
 		a11y_btn.clicked.connect (() => {
 			dump_a11y (window);
 		});
+		dl_btn.clicked.connect (() => {
+			var url = url_entry.text.strip ();
+			if (url == "") {
+				url = web.get_uri ();
+			}
+			print ("download_uri %s\n", url);
+			web.download_uri (url);
+		});
 
 		bar.append (back_btn);
 		bar.append (fwd_btn);
@@ -184,6 +220,7 @@ public class BrowserApplication : Adw.Application
 		bar.append (url_entry);
 		bar.append (go_btn);
 		bar.append (a11y_btn);
+		bar.append (dl_btn);
 
 		root.append (bar);
 		root.append (web);

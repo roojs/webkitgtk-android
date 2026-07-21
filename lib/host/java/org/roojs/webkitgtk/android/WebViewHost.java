@@ -307,6 +307,7 @@ public final class WebViewHost {
 		CookieManager cookieManager = CookieManager.getInstance();
 		cookieManager.setAcceptCookie(true);
 		cookieManager.setAcceptThirdPartyCookies(webView, true);
+		WebViewDownload.install(webView);
 
 		webView.setWebViewClient(new WebViewClient() {
 			@Override
@@ -554,4 +555,30 @@ public final class WebViewHost {
 
 	/** RGBA bytes + size; null/0 clears the GTK freeze picture. */
 	static native void nativeFreezeFrame(byte[] rgba, int width, int height);
+
+	/**
+	 * Allocate a download job for tool-path {@code download_uri} (no listener).
+	 *
+	 * @return job id, or 0 on failure
+	 */
+	public static int createDownload(String url) {
+		return WebViewDownload.createDownload(url);
+	}
+
+	public static boolean startDownload(int id, String destPath, boolean overwrite) {
+		return WebViewDownload.startDownload(id, destPath, overwrite);
+	}
+
+	public static void cancelDownload(int id) {
+		WebViewDownload.cancelDownload(id);
+	}
+
+	static native void nativeDownloadStarted(int id, String uri, String suggested,
+			String mime, long contentLength);
+
+	static native void nativeDownloadProgress(int id, long received);
+
+	static native void nativeDownloadFinished(int id);
+
+	static native void nativeDownloadFailed(int id, String message);
 }

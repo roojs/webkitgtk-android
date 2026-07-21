@@ -62,7 +62,8 @@ adb logcat -s WebViewHost:I WebViewA11y:I print:I *:E
 | `examples/hello/main.vala` | Phase 1 Adw Hello World |
 | `examples/browser/main.vala` | Phase 2/3 chrome + WebView + Dump a11y |
 | `lib/host/` | JNI C + `WebViewHost.java` + `WebViewA11y.java` |
-| `lib/webkitgtkandroid/webview.vala` | `WebKitGtkAndroid.WebView` |
+| `lib/webkitgtkandroid/WebView.vala` | `WebKitGtkAndroid.WebView` |
+| `lib/webkitgtkandroid/namespace.vala` | enums / `NetworkError` |
 | `android/pixiewood-hello.xml` | Phase 1 Pixiewood manifest |
 | `android/pixiewood-browser.xml` | Phase 2 Pixiewood manifest |
 | `meson.build` | `-Dandroid_hello` / `-Dandroid_browser` (exclusive) |
