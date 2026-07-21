@@ -1,0 +1,13 @@
+# Extra Meson cross options for Pixiewood Android (injected by meson-for-pixiewood.sh).
+# Keep in sync with OLLMchat android/pixiewood-extra.cross libsoup block.
+
+[libsoup:project options]
+tests = false
+introspection = 'disabled'
+docs = 'disabled'
+brotli = 'disabled'
+gssapi = 'disabled'
+ntlm = 'disabled'
+# Cross builds cannot run libsoup's GIO TLS compile-time probe.
+tls_check = false
+sysprof = 'disabled'

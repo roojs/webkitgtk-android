@@ -43,6 +43,9 @@
     <fontconfig/>
     <gtk/>
     <libadwaita/>
+    <nghttp2/>
+    <sqlite3/>
+    <libsoup/>
   </dependencies>
   <build target="webkitgtk-android-browser">
     <configure-options>

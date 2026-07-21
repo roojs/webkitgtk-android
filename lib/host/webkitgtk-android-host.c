@@ -14,9 +14,13 @@ static JavaVM *wka_vm = NULL;
 static jclass wka_host_cls_global = NULL;
 static WkaLoadChangedCb wka_load_cb = NULL;
 static WkaTitleCb wka_title_cb = NULL;
+static WkaFreezeFrameCb wka_freeze_cb = NULL;
 static gpointer wka_cb_data = NULL;
 static char wka_uri_buf[4096];
 static char wka_title_buf[1024];
+static GBytes *wka_freeze_bytes = NULL;
+static int wka_freeze_w = 0;
+static int wka_freeze_h = 0;
 
 JNIEXPORT void JNICALL
 Java_org_roojs_webkitgtk_android_WebViewHost_nativeLoadChanged (JNIEnv *env,
@@ -24,6 +28,12 @@ Java_org_roojs_webkitgtk_android_WebViewHost_nativeLoadChanged (JNIEnv *env,
                                                                 jint load_event);
 JNIEXPORT void JNICALL
 Java_org_roojs_webkitgtk_android_WebViewHost_nativeTitleChanged (JNIEnv *env, jclass cls);
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeFreezeFrame (JNIEnv *env,
+                                                                jclass cls,
+                                                                jbyteArray rgba,
+                                                                jint width,
+                                                                jint height);
 
 JNIEXPORT jint
 JNI_OnLoad (JavaVM *vm, void *reserved)
@@ -68,6 +78,19 @@ wka_jni_env (void)
 		return NULL;
 	}
 	return env;
+}
+
+/* Shared with webkitgtk-android-a11y.c */
+JNIEnv *
+wka_get_env (void)
+{
+	return wka_jni_env ();
+}
+
+jclass
+wka_get_host_class (void)
+{
+	return wka_host_cls_global;
 }
 
 static jclass
@@ -121,7 +144,7 @@ static gboolean
 wka_cache_host_class (JNIEnv *env, jobject activity)
 {
 	jclass local;
-	JNINativeMethod natives[2];
+	JNINativeMethod natives[3];
 
 	if (wka_host_cls_global != NULL) {
 		return TRUE;
@@ -138,7 +161,10 @@ wka_cache_host_class (JNIEnv *env, jobject activity)
 	natives[1].name = "nativeTitleChanged";
 	natives[1].signature = "()V";
 	natives[1].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewHost_nativeTitleChanged;
-	if ((*env)->RegisterNatives (env, local, natives, 2) != 0) {
+	natives[2].name = "nativeFreezeFrame";
+	natives[2].signature = "([BII)V";
+	natives[2].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewHost_nativeFreezeFrame;
+	if ((*env)->RegisterNatives (env, local, natives, 3) != 0) {
 		(*env)->ExceptionClear (env);
 		(*env)->DeleteLocalRef (env, local);
 		return FALSE;
@@ -194,6 +220,54 @@ Java_org_roojs_webkitgtk_android_WebViewHost_nativeTitleChanged (JNIEnv *env, jc
 	g_idle_add (wka_emit_title_idle, NULL);
 }
 
+static gboolean
+wka_emit_freeze_idle (gpointer data)
+{
+	(void) data;
+	if (wka_freeze_cb != NULL) {
+		wka_freeze_cb (wka_freeze_bytes, wka_freeze_w, wka_freeze_h, wka_cb_data);
+	}
+	g_clear_pointer (&wka_freeze_bytes, g_bytes_unref);
+	wka_freeze_w = 0;
+	wka_freeze_h = 0;
+	return G_SOURCE_REMOVE;
+}
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeFreezeFrame (JNIEnv *env,
+                                                                jclass cls,
+                                                                jbyteArray rgba,
+                                                                jint width,
+                                                                jint height)
+{
+	jbyte *elems;
+	jsize len;
+
+	(void) cls;
+	g_clear_pointer (&wka_freeze_bytes, g_bytes_unref);
+	wka_freeze_w = 0;
+	wka_freeze_h = 0;
+
+	if (rgba != NULL && width > 0 && height > 0) {
+		len = (*env)->GetArrayLength (env, rgba);
+		if (len >= (jsize) width * (jsize) height * 4) {
+			elems = (*env)->GetByteArrayElements (env, rgba, NULL);
+			if (elems != NULL) {
+				wka_freeze_bytes = g_bytes_new (elems, (gsize) width * (gsize) height * 4);
+				(*env)->ReleaseByteArrayElements (env, rgba, elems, JNI_ABORT);
+				wka_freeze_w = width;
+				wka_freeze_h = height;
+			}
+		}
+	}
+
+	if (g_main_context_is_owner (g_main_context_default ())) {
+		wka_emit_freeze_idle (NULL);
+	} else {
+		g_idle_add (wka_emit_freeze_idle, NULL);
+	}
+}
+
 void
 wka_host_set_event_handlers (WkaLoadChangedCb load_changed,
                              WkaTitleCb title_changed,
@@ -202,6 +276,64 @@ wka_host_set_event_handlers (WkaLoadChangedCb load_changed,
 	wka_load_cb = load_changed;
 	wka_title_cb = title_changed;
 	wka_cb_data = user_data;
+}
+
+void
+wka_host_set_freeze_frame_handler (WkaFreezeFrameCb cb)
+{
+	wka_freeze_cb = cb;
+}
+
+gboolean
+wka_host_freeze (void)
+{
+	JNIEnv *env;
+	jclass cls;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return FALSE;
+	}
+	cls = wka_host_cls_global;
+	mid = (*env)->GetStaticMethodID (env, cls, "freeze", "()V");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return FALSE;
+	}
+	(*env)->CallStaticVoidMethod (env, cls, mid);
+	if ((*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionDescribe (env);
+		(*env)->ExceptionClear (env);
+		return FALSE;
+	}
+	return TRUE;
+}
+
+gboolean
+wka_host_resume (void)
+{
+	JNIEnv *env;
+	jclass cls;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return FALSE;
+	}
+	cls = wka_host_cls_global;
+	mid = (*env)->GetStaticMethodID (env, cls, "resume", "()V");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return FALSE;
+	}
+	(*env)->CallStaticVoidMethod (env, cls, mid);
+	if ((*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionDescribe (env);
+		(*env)->ExceptionClear (env);
+		return FALSE;
+	}
+	return TRUE;
 }
 
 gboolean

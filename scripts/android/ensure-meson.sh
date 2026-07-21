@@ -29,27 +29,56 @@ install_meson_root_shim() {
     exit 1
   fi
 
-  cat > "$MESON_ROOT_BIN" <<EOF
+  local want
+  want="$(cat <<EOF
 #!/usr/bin/env bash
 export PYTHONPATH="$MESON_PYTHONPATH\${PYTHONPATH:+:\$PYTHONPATH}"
 exec python3 "$MESON_REAL_BIN" "\$@"
 EOF
+)"
+  if [ -f "$MESON_ROOT_BIN" ] && [ "$(cat "$MESON_ROOT_BIN")" = "$want" ]; then
+    return
+  fi
+  if ! cat > "$MESON_ROOT_BIN" <<EOF
+$want
+EOF
+  then
+    echo "Warning: cannot update $MESON_ROOT_BIN (permission denied); using existing shim" >&2
+    return
+  fi
   chmod +x "$MESON_ROOT_BIN"
 }
 
 write_meson_wrapper() {
-  cat > "$MESON_WRAPPER" <<EOF
+  mkdir -p "$(dirname "$MESON_WRAPPER")"
+  local want
+  want="$(cat <<EOF
 #!/usr/bin/env bash
 exec "$MESON_ROOT_BIN" "\$@"
 EOF
+)"
+  if [ -f "$MESON_WRAPPER" ] && [ "$(cat "$MESON_WRAPPER" 2>/dev/null)" = "$want" ]; then
+    return
+  fi
+  if ! cat > "$MESON_WRAPPER" <<EOF
+$want
+EOF
+  then
+    echo "Warning: cannot write $MESON_WRAPPER; callers should use $MESON_ROOT_BIN" >&2
+    return
+  fi
   chmod +x "$MESON_WRAPPER"
 }
 
 if [ -d "$MESON_TOOLS_DIR/root/usr/bin" ]; then
   install_meson_root_shim
   write_meson_wrapper
-  if version_ge "$("$MESON_ROOT_BIN" --version)" "$MESON_MIN_VERSION"; then
-    printf '%s\n' "$MESON_WRAPPER"
+  MESON_RUN="$MESON_WRAPPER"
+  if [ ! -x "$MESON_RUN" ]; then
+    MESON_RUN="$MESON_ROOT_BIN"
+  fi
+  if version_ge "$("$MESON_RUN" --version)" "$MESON_MIN_VERSION"; then
+    printf '%s\n' "$MESON_RUN"
     exit 0
   fi
   rm -rf "$MESON_TOOLS_DIR"

@@ -91,6 +91,36 @@ pixiewood_toolchain_ready() {
     [ -f "$ROOT_DIR/.pixiewood/toolchain.cross" ]
 }
 
+install_pixiewood_extra_wraps() {
+  local extra="$ROOT_DIR/android/pixiewood-wraps"
+  if [ ! -d "$extra" ]; then
+    return
+  fi
+
+  mkdir -p "$ROOT_DIR/subprojects"
+
+  local dep_dir dep dest wrap
+  for dep_dir in "$extra"/*/; do
+    [ -d "$dep_dir" ] || continue
+    dep="$(basename "$dep_dir")"
+    dest="$PIXIEWOOD_DIR/prepare/wraps/$dep"
+    if mkdir -p "$dest" 2>/dev/null; then
+      cp -a "$dep_dir"/* "$dest/" 2>/dev/null || true
+    fi
+
+    for wrap in "$dep_dir"/*.wrap; do
+      if [ -f "$wrap" ]; then
+        cp -a "$wrap" "$ROOT_DIR/subprojects/"
+      fi
+    done
+
+    if [ -d "$dep_dir/packagefiles" ]; then
+      mkdir -p "$ROOT_DIR/subprojects/packagefiles"
+      cp -a "$dep_dir/packagefiles/." "$ROOT_DIR/subprojects/packagefiles/"
+    fi
+  done
+}
+
 init_pixiewood_env() {
   if [ ! -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ] ||
      [ ! -d "$ANDROID_SDK_ROOT/ndk" ]; then
@@ -99,6 +129,7 @@ init_pixiewood_env() {
   fi
 
   ensure_gtk_android_builder
+  install_pixiewood_extra_wraps
   export ANDROID_HOME="$ANDROID_SDK_ROOT"
   export ANDROID_SDK_ROOT
   export CC="${CC:-gcc}"
@@ -150,6 +181,48 @@ patch_pixiewood_gradle_native_libs() {
     }' "$gradle"
 }
 
+install_webview_java() {
+  local dest="$ROOT_DIR/.pixiewood/android/app/src/main/java/org/roojs/webkitgtk/android"
+  local src="$ROOT_DIR/lib/host/java/org/roojs/webkitgtk/android"
+
+  if [ ! -d "$src" ]; then
+    return 0
+  fi
+  mkdir -p "$dest"
+  # Drop obsolete WakeA11yService if a prior build left it in the tree.
+  rm -f "$dest/WakeA11yService.java"
+  cp -a "$src"/*.java "$dest/"
+  echo "Installed WebViewHost Java into $dest"
+}
+
+strip_wake_a11y_service_from_manifest() {
+  local manifest="$ROOT_DIR/.pixiewood/android/app/src/main/AndroidManifest.xml"
+  if [ ! -f "$manifest" ]; then
+    return 0
+  fi
+  if ! grep -q 'WakeA11yService' "$manifest"; then
+    return 0
+  fi
+  python3 - "$manifest" <<'PY'
+import re, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+text = path.read_text()
+text2, n = re.subn(
+    r'\s*<service\b[^>]*WakeA11yService[\s\S]*?</service>\s*',
+    '\n',
+    text,
+    count=1,
+)
+if n:
+    path.write_text(text2)
+    print('Removed WakeA11yService from AndroidManifest')
+PY
+  # Also drop leftover wake a11y resources if present
+  rm -f "$ROOT_DIR/.pixiewood/android/app/src/main/res/xml/wake_a11y_service.xml"
+  rm -f "$ROOT_DIR/.pixiewood/android/app/src/main/res/values/wake_a11y_strings.xml"
+}
+
 patch_android_manifest_launch_mode() {
   local manifest="$ROOT_DIR/.pixiewood/android/app/src/main/AndroidManifest.xml"
   if [ ! -f "$manifest" ]; then
@@ -172,18 +245,6 @@ materialize_pixiewood_jni_libs() {
   rm -rf "$jni"
   mkdir -p "$jni"
   cp -a "$root_lib/." "$jni/"
-}
-
-install_webview_java() {
-  local dest="$ROOT_DIR/.pixiewood/android/app/src/main/java/org/roojs/webkitgtk/android"
-  local src="$ROOT_DIR/lib/host/java/org/roojs/webkitgtk/android"
-
-  if [ ! -d "$src" ]; then
-    return 0
-  fi
-  mkdir -p "$dest"
-  cp -a "$src"/*.java "$dest/"
-  echo "Installed WebViewHost Java into $dest"
 }
 
 run_pixiewood_gradle_assemble() {
@@ -240,6 +301,7 @@ run_pixiewood_build() {
   # generate may wipe app Java — re-copy after meson install / generate
   install_webview_java
   patch_android_manifest_launch_mode
+  strip_wake_a11y_service_from_manifest
   run_pixiewood_gradle_assemble
   verify_apk
   echo "Generated Android artifacts under $ROOT_DIR/.pixiewood/android/app/build/outputs"

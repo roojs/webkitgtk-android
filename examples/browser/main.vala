@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 Alan Knowles <alan@roojs.com>
  *
- * Phase 2 browser demo — GTK chrome + Android System WebView.
+ * Phase 2/3 browser demo — GTK chrome + Android System WebView + a11y dump.
  * Default URL: https://roojs.com/index.php (avoids http redirect)
  */
 
@@ -18,6 +18,93 @@ private void sync_url_entry ()
 			url_entry.text = u;
 		}
 	}
+}
+
+private int a11y_node_count;
+
+private void a11y_dump_line (
+	int id,
+	int parent_id,
+	int x,
+	int y,
+	int w,
+	int h,
+	string name,
+	string role,
+	string value,
+	string uri,
+	bool can_invoke,
+	bool can_set_value,
+	void* user_data
+)
+{
+	unowned StringBuilder sb = (StringBuilder) user_data;
+	a11y_node_count++;
+	sb.append_printf (
+		"[%d] parent=%d role=%s name=\"%s\" value=\"%s\" uri=\"%s\" "
+		+ "bounds=%d,%d %dx%d invoke=%s set_value=%s\n",
+		id,
+		parent_id,
+		role,
+		name,
+		value,
+		uri,
+		x,
+		y,
+		w,
+		h,
+		can_invoke.to_string (),
+		can_set_value.to_string ()
+	);
+}
+
+private string a11y_preview (string full, int max_lines)
+{
+	var out = new StringBuilder ();
+	int lines = 0;
+	foreach (unowned string line in full.split ("\n")) {
+		if (line.length == 0) {
+			continue;
+		}
+		if (lines >= max_lines) {
+			out.append ("…\n");
+			break;
+		}
+		out.append (line);
+		out.append_c ('\n');
+		lines++;
+	}
+	return out.str;
+}
+
+private void show_a11y_dialog (Gtk.Window? parent, string title, string body)
+{
+	/* WebView auto-freezes when this dialog maps on the same toplevel. */
+	var dialog = new Adw.AlertDialog (title, body);
+	dialog.add_response ("ok", "OK");
+	dialog.present (parent);
+}
+
+private void dump_a11y (Gtk.Window? parent)
+{
+	var sb = new StringBuilder ();
+	a11y_node_count = 0;
+	if (!wka_host_a11y_ensure ()) {
+		print ("a11y ensure failed\n");
+		show_a11y_dialog (parent, "A11y dump", "ensure failed (see logcat WebViewA11y)");
+		return;
+	}
+	if (!wka_host_a11y_walk_foreach (a11y_dump_line, sb)) {
+		print ("a11y walk failed (empty tree?)\n");
+		show_a11y_dialog (parent, "A11y dump", "walk failed — empty tree?");
+		return;
+	}
+	print ("=== a11y dump ===\n%s=== end ===\n", sb.str);
+	var body = "%d nodes (also in logcat: print / WebViewA11y)\n\n%s".printf (
+		a11y_node_count,
+		a11y_preview (sb.str, 12)
+	);
+	show_a11y_dialog (parent, "A11y dump", body);
 }
 
 public class BrowserApplication : Adw.Application
@@ -57,12 +144,11 @@ public class BrowserApplication : Adw.Application
 			hexpand = true
 		};
 		var go_btn = new Gtk.Button.with_label ("Go");
+		var a11y_btn = new Gtk.Button.with_label ("Dump a11y");
 
 		web = new WebView ();
 		web.set_hexpand (true);
 		web.set_vexpand (true);
-		/* Prefer a solid placeholder so the GTK chrome/layout is obvious
-		 * around the native WebView overlay. */
 		web.add_css_class ("view");
 		web.load_uri (start);
 		web.load_changed.connect ((ev) => {
@@ -88,12 +174,16 @@ public class BrowserApplication : Adw.Application
 		url_entry.activate.connect (() => {
 			web.load_uri (url_entry.text);
 		});
+		a11y_btn.clicked.connect (() => {
+			dump_a11y (window);
+		});
 
 		bar.append (back_btn);
 		bar.append (fwd_btn);
 		bar.append (reload_btn);
 		bar.append (url_entry);
 		bar.append (go_btn);
+		bar.append (a11y_btn);
 
 		root.append (bar);
 		root.append (web);

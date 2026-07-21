@@ -6,6 +6,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -184,6 +185,95 @@ public final class WebViewHost {
 		return currentTitle;
 	}
 
+	/**
+	 * Cookie header for ''uri'' ({@code name=value; name2=value2}), or empty.
+	 * Same jar the WebView uses (android.webkit.CookieManager).
+	 */
+	public static String getCookies(String uri) {
+		if (uri == null || uri.length() == 0) {
+			return "";
+		}
+		try {
+			String raw = CookieManager.getInstance().getCookie(uri);
+			return raw != null ? raw : "";
+		} catch (Throwable t) {
+			Log.w(TAG, "getCookies failed", t);
+			return "";
+		}
+	}
+
+	/**
+	 * Add/update one cookie in the WebView jar (Set-Cookie style attributes).
+	 *
+	 * @return true if setCookie was called
+	 */
+	public static boolean addCookie(String name, String value, String domain,
+			String path, boolean httpOnly, boolean secure) {
+		if (name == null || name.length() == 0 || value == null) {
+			return false;
+		}
+		String host = domain != null ? domain : "";
+		if (host.startsWith(".")) {
+			host = host.substring(1);
+		}
+		if (host.length() == 0) {
+			Log.w(TAG, "addCookie: empty domain");
+			return false;
+		}
+		String p = (path == null || path.length() == 0) ? "/" : path;
+		String scheme = secure ? "https" : "http";
+		String url = scheme + "://" + host + p;
+		StringBuilder sb = new StringBuilder();
+		sb.append(name).append("=").append(value);
+		sb.append("; Path=").append(p);
+		if (domain != null && domain.length() > 0) {
+			sb.append("; Domain=").append(domain);
+		}
+		if (secure) {
+			sb.append("; Secure");
+		}
+		if (httpOnly) {
+			sb.append("; HttpOnly");
+		}
+		try {
+			CookieManager cm = CookieManager.getInstance();
+			cm.setAcceptCookie(true);
+			cm.setCookie(url, sb.toString());
+			cm.flush();
+			Log.i(TAG, "addCookie " + name + " for " + url);
+			return true;
+		} catch (Throwable t) {
+			Log.w(TAG, "addCookie failed", t);
+			return false;
+		}
+	}
+
+	/** For WebViewA11y — may be null before attach. */
+	public static WebView getWebView() {
+		return webView;
+	}
+
+	/** Modal freeze — see WebViewFreeze / docs/freeze.md. */
+	public static void freeze() {
+		WebViewFreeze.enter();
+	}
+
+	public static void resume() {
+		WebViewFreeze.exit();
+	}
+
+	/** Package: raise/lower GTK SurfaceView during freeze. */
+	static void setGtkSurfaceOnTopForFreeze(boolean onTop) {
+		setGtkSurfaceOnTop(onTop);
+		if (!onTop && webView != null) {
+			webView.setVisibility(View.VISIBLE);
+			webView.bringToFront();
+			gtkSurfaceLowered = true;
+		} else if (onTop) {
+			gtkSurfaceLowered = false;
+		}
+	}
+
 	/** Upgrade http:// to https:// — Android blocks cleartext by default. */
 	private static String forceHttps(String url) {
 		if (url == null || url.length() == 0) {
@@ -214,6 +304,9 @@ public final class WebViewHost {
 		WebSettings settings = webView.getSettings();
 		settings.setJavaScriptEnabled(true);
 		settings.setDomStorageEnabled(true);
+		CookieManager cookieManager = CookieManager.getInstance();
+		cookieManager.setAcceptCookie(true);
+		cookieManager.setAcceptThirdPartyCookies(webView, true);
 
 		webView.setWebViewClient(new WebViewClient() {
 			@Override
@@ -226,8 +319,14 @@ public final class WebViewHost {
 				}
 				currentUri = url != null ? url : "";
 				Log.i(TAG, "onPageStarted " + currentUri);
+				WebViewPaintProbe.logClient("onPageStarted", currentUri);
 				nativeLoadChanged(LOAD_STARTED);
 				nativeLoadChanged(LOAD_COMMITTED);
+			}
+
+			@Override
+			public void onPageCommitVisible(WebView view, String url) {
+				WebViewPaintProbe.logClient("onPageCommitVisible", url);
 			}
 
 			@Override
@@ -238,7 +337,9 @@ public final class WebViewHost {
 					nativeTitleChanged();
 				}
 				Log.i(TAG, "onPageFinished " + currentUri);
+				WebViewPaintProbe.logClient("onPageFinished", currentUri);
 				nativeLoadChanged(LOAD_FINISHED);
+				WebViewA11y.ensureAsync(view);
 			}
 
 			@Override
@@ -269,6 +370,13 @@ public final class WebViewHost {
 				currentTitle = title != null ? title : "";
 				nativeTitleChanged();
 			}
+
+			@Override
+			public void onProgressChanged(WebView view, int newProgress) {
+				if (newProgress == 0 || newProgress == 100 || newProgress % 25 == 0) {
+					WebViewPaintProbe.logClient("onProgressChanged", String.valueOf(newProgress));
+				}
+			}
 		});
 
 		FrameLayout.LayoutParams lp = layoutParams(act, x, y, w, h);
@@ -286,9 +394,13 @@ public final class WebViewHost {
 		Log.i(TAG, "attach contentView " + lp.leftMargin + "," + lp.topMargin
 			+ " " + lp.width + "x" + lp.height + " url=" + url);
 
+		WebViewPaintProbe.install(webView);
+
 		if (url != null && url.length() > 0) {
 			webView.loadUrl(forceHttps(url));
 		}
+		/* App-process a11y DirectConnection — no AccessibilityService. */
+		WebViewA11y.ensureAsync(webView);
 	}
 
 	private static void setBoundsUi(int x, int y, int w, int h) {
@@ -306,10 +418,16 @@ public final class WebViewHost {
 		lastH = lp.height;
 		webView.setLayoutParams(lp);
 		webView.setVisibility(View.VISIBLE);
-		webView.bringToFront();
-		if (!gtkSurfaceLowered) {
-			setGtkSurfaceOnTop(false);
-			gtkSurfaceLowered = true;
+		if (WebViewFreeze.isFrozen()) {
+			/* Keep parked off-screen — do not steal touches from GTK dialogs. */
+			webView.setTranslationX(WebViewFreeze.PARK_TRANSLATION_X);
+		} else {
+			webView.setTranslationX(0f);
+			webView.bringToFront();
+			if (!gtkSurfaceLowered) {
+				setGtkSurfaceOnTop(false);
+				gtkSurfaceLowered = true;
+			}
 		}
 		Log.i(TAG, "setBounds contentView " + lp.leftMargin + "," + lp.topMargin
 			+ " " + lp.width + "x" + lp.height);
@@ -410,6 +528,7 @@ public final class WebViewHost {
 	}
 
 	private static void destroyUi() {
+		WebViewFreeze.exit();
 		if (webView != null) {
 			ViewGroup parent = (ViewGroup) webView.getParent();
 			if (parent != null) {
@@ -432,4 +551,7 @@ public final class WebViewHost {
 	private static native void nativeLoadChanged(int loadEvent);
 
 	private static native void nativeTitleChanged();
+
+	/** RGBA bytes + size; null/0 clears the GTK freeze picture. */
+	static native void nativeFreezeFrame(byte[] rgba, int width, int height);
 }

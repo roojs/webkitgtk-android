@@ -9,7 +9,8 @@
 /**
  * GTK 4 widget embedding Android System WebView (WebKitGTK-shaped subset).
  *
- * Phase 2: navigation + load_changed. Accessibility is Phase 3.
+ * Phase 2: navigation + load_changed.
+ * Phase 3: host a11y via wka_host_a11y_* (webview2-gtk-shaped).
  */
 
 [CCode (cheader_filename = "webkitgtk-android-host-api.h")]
@@ -68,6 +69,41 @@ extern bool wka_widget_bounds_xywh (
 	out int height
 );
 
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_a11y_ensure ();
+[CCode (cheader_filename = "webkitgtk-android-host-api.h", has_target = false)]
+public delegate void WkaA11yForeachCb (
+	int id,
+	int parent_id,
+	int x,
+	int y,
+	int w,
+	int h,
+	string name,
+	string role,
+	string value,
+	string uri,
+	bool can_invoke,
+	bool can_set_value,
+	void* user_data
+);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_a11y_walk_foreach (WkaA11yForeachCb cb, void* user_data);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_a11y_invoke (int id);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_a11y_set_value (int id, string utf8);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_a11y_focus (int id);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h", has_target = false)]
+public delegate void WkaFreezeFrameCb (GLib.Bytes? rgba, int width, int height, void* user_data);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern void wka_host_set_freeze_frame_handler (WkaFreezeFrameCb? cb);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_freeze ();
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern bool wka_host_resume ();
+
 namespace WebKitGtkAndroid
 {
 	/**
@@ -85,11 +121,33 @@ namespace WebKitGtkAndroid
 	 * Embeds Android System WebView over the GTK Android surface.
 	 *
 	 * Limitation (v0.1): one WebView host per process.
+	 *
+	 * Modal freeze: watches the same toplevel for overlay UI → auto
+	 * {@link refresh_freeze}. Detects GObject type name {@code AdwDialog}
+	 * (string match up the type hierarchy, no Adwaita link) and transient
+	 * {@link Gtk.Window}. Hooks {@code parent-set} so freeze runs when a dialog
+	 * is parented — before map/present finishes. Set {@link freeze_manual} and
+	 * call {@link refresh_freeze} for overlay UI the monitor does not see.
 	 */
 	public class WebView : Gtk.Box
 	{
+		private static GenericArray<WebView> freeze_watchers = new GenericArray<WebView> ();
+		private static bool freeze_hooks_installed = false;
+		private static uint sig_parent_set;
+		private static uint sig_unmap;
+
+		private Gtk.Overlay overlay;
 		private Gtk.Widget host_area;
+		/*
+		 * FILL into host_area (under app toolbar). Do not paint at tex/gtk_scale —
+		 * that is narrower than the density-sized host and looks horizontally
+		 * scaled once the SurfaceView maps buffer→screen. Android ImageView
+		 * cover (WebViewFreeze) keeps 1:1 pixels under the system nav bar.
+		 */
+		public Gtk.Picture freeze_picture;
 		private bool attached = false;
+		public bool freeze_active = false;
+		public bool freeze_manual = false;
 		private string pending_uri = "";
 		private string uri = "about:blank";
 		private string title = "";
@@ -98,6 +156,7 @@ namespace WebKitGtkAndroid
 		private int last_bound_y = int.MIN;
 		private int last_bound_w = int.MIN;
 		private int last_bound_h = int.MIN;
+		private NetworkSession network_session = new NetworkSession ();
 
 		public bool ready {
 			get {
@@ -116,33 +175,229 @@ namespace WebKitGtkAndroid
 		public WebView ()
 		{
 			Object (orientation: Gtk.Orientation.VERTICAL, spacing: 0);
+			this.overlay = new Gtk.Overlay ();
+			this.overlay.set_hexpand (true);
+			this.overlay.set_vexpand (true);
 			this.host_area = new Gtk.DrawingArea ();
 			this.host_area.set_hexpand (true);
 			this.host_area.set_vexpand (true);
-			this.append (this.host_area);
+			this.freeze_picture = new Gtk.Picture () {
+				content_fit = Gtk.ContentFit.FILL,
+				can_shrink = true,
+				hexpand = true,
+				vexpand = true,
+				visible = false
+			};
+			this.overlay.set_child (this.host_area);
+			this.overlay.add_overlay (this.freeze_picture);
+			this.append (this.overlay);
 
-			wka_host_set_event_handlers (
-				WebView.native_load_changed,
-				WebView.native_title_changed,
-				this
-			);
+			wka_host_set_event_handlers ((user_data, load_event) => {
+				var self = (WebView) user_data;
+				switch (load_event) {
+				case (int) LoadEvent.STARTED:
+					self.is_loading = true;
+					self.load_changed (LoadEvent.STARTED);
+					break;
+				case (int) LoadEvent.REDIRECTED:
+					self.load_changed (LoadEvent.REDIRECTED);
+					break;
+				case (int) LoadEvent.COMMITTED:
+					self.uri = wka_host_get_uri ();
+					self.load_changed (LoadEvent.COMMITTED);
+					break;
+				case (int) LoadEvent.FINISHED:
+					self.is_loading = false;
+					self.uri = wka_host_get_uri ();
+					self.title = wka_host_get_title ();
+					self.load_changed (LoadEvent.FINISHED);
+					break;
+				}
+			}, (user_data) => {
+				((WebView) user_data).title = wka_host_get_title ();
+			}, this);
+			wka_host_set_freeze_frame_handler ((rgba, width, height, user_data) => {
+				var self = (WebView) user_data;
+				if (rgba == null || width <= 0 || height <= 0) {
+					self.freeze_picture.visible = false;
+					self.freeze_picture.set_paintable (null);
+					return;
+				}
+				self.freeze_picture.set_paintable (new Gdk.MemoryTexture (
+					width,
+					height,
+					Gdk.MemoryFormat.R8G8B8A8,
+					rgba,
+					width * 4
+				));
+				self.freeze_picture.visible = true;
+			});
+
+			if (!WebView.freeze_hooks_installed) {
+				WebView.freeze_hooks_installed = true;
+				WebView.sig_parent_set = Signal.lookup ("parent-set", typeof (Gtk.Widget));
+				WebView.sig_unmap = Signal.lookup ("unmap", typeof (Gtk.Widget));
+				Signal.add_emission_hook (WebView.sig_parent_set, 0, WebView.freeze_hook);
+				Signal.add_emission_hook (Signal.lookup ("map", typeof (Gtk.Widget)), 0, WebView.freeze_hook);
+				Signal.add_emission_hook (WebView.sig_unmap, 0, WebView.freeze_hook);
+			}
+			WebView.freeze_watchers.add (this);
+			this.destroy.connect (() => {
+				for (var i = 0; i < WebView.freeze_watchers.length; i++) {
+					if (WebView.freeze_watchers[i] == this) {
+						WebView.freeze_watchers.remove_index (i);
+						break;
+					}
+				}
+			});
 
 			this.host_area.map.connect (() => {
-				this.try_attach ();
+				if (this.attached) {
+					return;
+				}
+				int x = 0, y = 0, width = 0, height = 0;
+				if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
+					return;
+				}
+				var start_uri = this.pending_uri.length > 0 ? this.pending_uri : "about:blank";
+				if (!wka_host_create_with_xywh (this.host_area, x, y, width, height, start_uri)) {
+					return;
+				}
+				this.attached = true;
+				this.pending_uri = "";
 			});
 			this.host_area.add_tick_callback (() => {
 				if (!this.attached) {
-					this.try_attach ();
-				} else {
-					this.push_bounds ();
+					int ax = 0, ay = 0, aw = 0, ah = 0;
+					if (wka_widget_bounds_xywh (this.host_area, out ax, out ay, out aw, out ah)) {
+						var start_uri = this.pending_uri.length > 0 ? this.pending_uri : "about:blank";
+						if (wka_host_create_with_xywh (this.host_area, ax, ay, aw, ah, start_uri)) {
+							this.attached = true;
+							this.pending_uri = "";
+						}
+					}
+					return GLib.Source.CONTINUE;
 				}
+				int x = 0, y = 0, width = 0, height = 0;
+				if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
+					return GLib.Source.CONTINUE;
+				}
+				if (x == this.last_bound_x && y == this.last_bound_y
+					&& width == this.last_bound_w && height == this.last_bound_h) {
+					return GLib.Source.CONTINUE;
+				}
+				this.last_bound_x = x;
+				this.last_bound_y = y;
+				this.last_bound_w = width;
+				this.last_bound_h = height;
+				wka_host_set_bounds_xywh (x, y, width, height);
 				return GLib.Source.CONTINUE;
 			});
 		}
 
 		~WebView ()
 		{
+			wka_host_set_freeze_frame_handler (null);
 			wka_host_destroy ();
+		}
+
+		/**
+		 * Recompute frozen state from {@link freeze_manual} and toplevel overlays.
+		 * Auto-monitor calls this; apps set {@link freeze_manual} then call this.
+		 */
+		public void refresh_freeze ()
+		{
+			if (!this.attached) {
+				return;
+			}
+
+			bool need = this.freeze_manual;
+			var root = this.get_root () as Gtk.Window;
+			if (root != null && !need) {
+				var stack = new GenericArray<Gtk.Widget> ();
+				stack.add (root);
+				while (stack.length > 0) {
+					var w = stack[stack.length - 1];
+					stack.remove_index (stack.length - 1);
+					for (var t = w.get_type (); t != Type.INVALID; t = t.parent ()) {
+						if (t.name () != "AdwDialog" || w.get_parent () == null) {
+							continue;
+						}
+						need = true;
+						break;
+					}
+					if (need) {
+						break;
+					}
+					for (var c = w.get_first_child (); c != null; c = c.get_next_sibling ()) {
+						stack.add (c);
+					}
+				}
+			}
+			if (root != null && !need) {
+				foreach (var top in Gtk.Window.list_toplevels ()) {
+					if (top == root) {
+						continue;
+					}
+					if (!top.get_mapped ()) {
+						continue;
+					}
+					if (top.transient_for != root) {
+						continue;
+					}
+					need = true;
+					break;
+				}
+			}
+
+			if (need) {
+				if (this.freeze_active) {
+					return;
+				}
+				this.freeze_active = true;
+				wka_host_freeze ();
+				return;
+			}
+			if (!this.freeze_active) {
+				return;
+			}
+			this.freeze_active = false;
+			this.freeze_picture.visible = false;
+			this.freeze_picture.set_paintable (null);
+			wka_host_resume ();
+		}
+
+		private static bool freeze_hook (SignalInvocationHint ihint, Value[] param_values)
+		{
+			var w = param_values[0].get_object () as Gtk.Widget;
+			if (w == null) {
+				return true;
+			}
+			bool adw_dialog = false;
+			for (var t = w.get_type (); t != Type.INVALID; t = t.parent ()) {
+				if (t.name () == "AdwDialog") {
+					adw_dialog = true;
+					break;
+				}
+			}
+			if (!adw_dialog && !(w is Gtk.Window)) {
+				return true;
+			}
+			/* unmap / unparent: widget may still look present — defer. parent-set+map: now. */
+			if (ihint.signal_id == WebView.sig_unmap
+				|| (ihint.signal_id == WebView.sig_parent_set && w.get_parent () == null)) {
+				GLib.Idle.add (() => {
+					for (var i = 0; i < WebView.freeze_watchers.length; i++) {
+						WebView.freeze_watchers[i].refresh_freeze ();
+					}
+					return GLib.Source.REMOVE;
+				});
+				return true;
+			}
+			for (var i = 0; i < WebView.freeze_watchers.length; i++) {
+				WebView.freeze_watchers[i].refresh_freeze ();
+			}
+			return true;
 		}
 
 		public unowned string get_uri ()
@@ -161,14 +416,30 @@ namespace WebKitGtkAndroid
 			return this.title;
 		}
 
+		/**
+		 * WebKitGTK-shaped network session (cookie manager).
+		 */
+		public NetworkSession get_network_session ()
+		{
+			return this.network_session;
+		}
+
 		public void load_uri (string uri)
 		{
 			this.pending_uri = uri;
-			if (!this.attached) {
-				this.try_attach ();
+			if (this.attached) {
+				wka_host_navigate (uri);
 				return;
 			}
-			wka_host_navigate (uri);
+			int x = 0, y = 0, width = 0, height = 0;
+			if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
+				return;
+			}
+			if (!wka_host_create_with_xywh (this.host_area, x, y, width, height, uri)) {
+				return;
+			}
+			this.attached = true;
+			this.pending_uri = "";
 		}
 
 		public void go_back ()
@@ -205,94 +476,31 @@ namespace WebKitGtkAndroid
 		{
 			base.size_allocate (width, height, baseline);
 			if (!this.attached) {
-				this.try_attach ();
+				int x = 0, y = 0, w = 0, h = 0;
+				if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out w, out h)) {
+					return;
+				}
+				var start_uri = this.pending_uri.length > 0 ? this.pending_uri : "about:blank";
+				if (!wka_host_create_with_xywh (this.host_area, x, y, w, h, start_uri)) {
+					return;
+				}
+				this.attached = true;
+				this.pending_uri = "";
 				return;
 			}
-			this.push_bounds ();
-		}
-
-		private static void native_load_changed (void* user_data, int load_event)
-		{
-			var self = (WebView) user_data;
-			self.on_native_load_changed (load_event);
-		}
-
-		private static void native_title_changed (void* user_data)
-		{
-			var self = (WebView) user_data;
-			self.on_native_title_changed ();
-		}
-
-		private void try_attach ()
-		{
-			int x = 0;
-			int y = 0;
-			int width = 0;
-			int height = 0;
-			var start_uri = this.pending_uri.length > 0 ? this.pending_uri : "about:blank";
-
-			if (this.attached) {
-				return;
-			}
-			/* Wait for a real allocation so the overlay matches the host area.
-			 * Tick callback retries until the Activity + widget are ready. */
-			if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
-				return;
-			}
-			if (!wka_host_create_with_xywh (this.host_area, x, y, width, height, start_uri)) {
-				return;
-			}
-			this.attached = true;
-			this.pending_uri = "";
-		}
-
-		private void push_bounds ()
-		{
-			int x = 0;
-			int y = 0;
-			int width = 0;
-			int height = 0;
-
-			if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
+			int x = 0, y = 0, w = 0, h = 0;
+			if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out w, out h)) {
 				return;
 			}
 			if (x == this.last_bound_x && y == this.last_bound_y
-				&& width == this.last_bound_w && height == this.last_bound_h) {
+				&& w == this.last_bound_w && h == this.last_bound_h) {
 				return;
 			}
 			this.last_bound_x = x;
 			this.last_bound_y = y;
-			this.last_bound_w = width;
-			this.last_bound_h = height;
-			wka_host_set_bounds_xywh (x, y, width, height);
-		}
-
-		private void on_native_load_changed (int load_event)
-		{
-			switch (load_event) {
-			case (int) LoadEvent.STARTED:
-				this.is_loading = true;
-				this.load_changed (LoadEvent.STARTED);
-				break;
-			case (int) LoadEvent.REDIRECTED:
-				this.load_changed (LoadEvent.REDIRECTED);
-				break;
-			case (int) LoadEvent.COMMITTED:
-				this.uri = wka_host_get_uri ();
-				this.load_changed (LoadEvent.COMMITTED);
-				break;
-			case (int) LoadEvent.FINISHED:
-				this.is_loading = false;
-				this.uri = wka_host_get_uri ();
-				this.title = wka_host_get_title ();
-				this.load_changed (LoadEvent.FINISHED);
-				break;
-			}
-		}
-
-		private void on_native_title_changed ()
-		{
-			this.title = wka_host_get_title ();
+			this.last_bound_w = w;
+			this.last_bound_h = h;
+			wka_host_set_bounds_xywh (x, y, w, h);
 		}
 	}
 }

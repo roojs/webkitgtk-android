@@ -45,7 +45,14 @@ Output:
 Useful logcat filter after launch:
 
 ```bash
-adb logcat -s WebViewHost:I GTK\ Runtime:D Gdk:D *:E
+adb logcat -s WebViewHost:I WebViewA11y:I GTK\ Runtime:D Gdk:D *:E
+```
+
+Phase 3: tap **Dump a11y** in the toolbar; dump lines also go to stdout / logcat.
+Force-on is in-app (`setQueryFromAppProcessEnabled` + provider wake) — no TalkBack / no wake service. See [`docs/a11y.md`](a11y.md).
+
+```bash
+adb logcat -s WebViewHost:I WebViewA11y:I print:I *:E
 ```
 
 ## Layout
@@ -53,8 +60,8 @@ adb logcat -s WebViewHost:I GTK\ Runtime:D Gdk:D *:E
 | Path | Role |
 |------|------|
 | `examples/hello/main.vala` | Phase 1 Adw Hello World |
-| `examples/browser/main.vala` | Phase 2 chrome + WebView |
-| `lib/host/` | JNI C + `WebViewHost.java` |
+| `examples/browser/main.vala` | Phase 2/3 chrome + WebView + Dump a11y |
+| `lib/host/` | JNI C + `WebViewHost.java` + `WebViewA11y.java` |
 | `lib/webkitgtkandroid/webview.vala` | `WebKitGtkAndroid.WebView` |
 | `android/pixiewood-hello.xml` | Phase 1 Pixiewood manifest |
 | `android/pixiewood-browser.xml` | Phase 2 Pixiewood manifest |

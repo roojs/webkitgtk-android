@@ -18,14 +18,29 @@ adw_dep = dependency('libadwaita-1')
 gio_dep = dependency('gio-2.0')
 glib_dep = dependency('glib-2.0')
 gobject_dep = dependency('gobject-2.0')
+soup_dep = dependency(
+  'libsoup-3.0',
+  default_options: [
+    'introspection=disabled',
+    'vapi=disabled',
+    'docs=disabled',
+    'tests=false',
+    'tls_check=false',
+    'sysprof=disabled',
+    'brotli=disabled',
+    'gssapi=disabled',
+    'ntlm=disabled',
+  ],
+)
 
-common_deps = [gtk_dep, adw_dep, gio_dep, glib_dep, gobject_dep]
+common_deps = [gtk_dep, adw_dep, gio_dep, glib_dep, gobject_dep, soup_dep]
 common_vala_args = [
   '--pkg=gtk4',
   '--pkg=libadwaita-1',
   '--pkg=gio-2.0',
   '--pkg=glib-2.0',
   '--pkg=gobject-2.0',
+  '--pkg=libsoup-3.0',
 ]
 
 if get_option('android_browser')
@@ -34,8 +49,11 @@ if get_option('android_browser')
   browser_sources = files(
     'examples/browser/main.vala',
     'lib/webkitgtkandroid/webview.vala',
+    'lib/webkitgtkandroid/network-session.vala',
     'lib/host/webkitgtk-android-host.c',
     'lib/host/webkitgtk-android-bounds.c',
+    'lib/host/webkitgtk-android-a11y.c',
+    'lib/host/webkitgtk-android-cookies.c',
   )
   executable(
     'webkitgtk-android-browser',
