@@ -1,0 +1,8 @@
+[android]
+name=Android
+runtime=host
+toolchain=default
+config-opts=--cross-file /home/alan/git/webkitgtk-android/.pixiewood/toolchain.cross --cross-file /home/alan/gitlive/OLLMchat/.android-tools/gtk-android-builder/prepare/arch/aarch64.cross --cross-file /home/alan/gitlive/OLLMchat/.android-tools/gtk-android-builder/prepare/android.cross -Dandroid_browser=true
+
+[android.environment]
+MESON=/home/alan/git/webkitgtk-android/scripts/android/meson-for-pixiewood.sh

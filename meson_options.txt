@@ -1,0 +1,13 @@
+option(
+  'android_hello',
+  type: 'boolean',
+  value: false,
+  description: 'Build Phase 1 GTK Hello World Android application (Pixiewood)',
+)
+
+option(
+  'android_browser',
+  type: 'boolean',
+  value: false,
+  description: 'Build Phase 2 browser with System WebView embed (Pixiewood)',
+)

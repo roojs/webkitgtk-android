@@ -1,0 +1,584 @@
+/* JNI host for org.roojs.webkitgtk.android.WebViewHost */
+
+#include "webkitgtk-android-host-api.h"
+
+#include <android/log.h>
+#include <jni.h>
+#include <string.h>
+
+#include <gdk/android/gdkandroid.h>
+
+#define WKA_LOG_TAG "WebViewHost"
+
+static JavaVM *wka_vm = NULL;
+static jclass wka_host_cls_global = NULL;
+static WkaLoadChangedCb wka_load_cb = NULL;
+static WkaTitleCb wka_title_cb = NULL;
+static gpointer wka_cb_data = NULL;
+static char wka_uri_buf[4096];
+static char wka_title_buf[1024];
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeLoadChanged (JNIEnv *env,
+                                                                jclass cls,
+                                                                jint load_event);
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeTitleChanged (JNIEnv *env, jclass cls);
+
+JNIEXPORT jint
+JNI_OnLoad (JavaVM *vm, void *reserved)
+{
+	(void) reserved;
+	wka_vm = vm;
+	return JNI_VERSION_1_6;
+}
+
+/*
+ * Pixiewood loads the app .so via g_module_open (dlopen), not
+ * System.loadLibrary — JNI_OnLoad usually never runs. Use GDK's
+ * public JNIEnv (same one that created Activity local refs).
+ */
+static JNIEnv *
+wka_jni_env (void)
+{
+	GdkDisplay *display;
+	JNIEnv *env = NULL;
+
+	display = gdk_display_get_default ();
+	if (display != NULL && GDK_IS_ANDROID_DISPLAY (display)) {
+		env = gdk_android_display_get_env (display);
+		if (env != NULL) {
+			if (wka_vm == NULL) {
+				(*env)->GetJavaVM (env, &wka_vm);
+			}
+			return env;
+		}
+	}
+
+	if (wka_vm == NULL) {
+		__android_log_print (ANDROID_LOG_ERROR, WKA_LOG_TAG,
+			"no JNIEnv (GDK Android display not ready)");
+		return NULL;
+	}
+	if ((*wka_vm)->GetEnv (wka_vm, (void **) &env, JNI_VERSION_1_6) == JNI_OK) {
+		return env;
+	}
+	if ((*wka_vm)->AttachCurrentThread (wka_vm, &env, NULL) != JNI_OK) {
+		__android_log_print (ANDROID_LOG_ERROR, WKA_LOG_TAG, "AttachCurrentThread failed");
+		return NULL;
+	}
+	return env;
+}
+
+static jclass
+wka_load_class (JNIEnv *env, jobject activity, const char *name)
+{
+	jclass activity_cls;
+	jmethodID get_cl;
+	jobject loader;
+	jclass loader_cls;
+	jmethodID load_class;
+	jstring jname;
+	jclass result;
+
+	activity_cls = (*env)->GetObjectClass (env, activity);
+	get_cl = (*env)->GetMethodID (env, activity_cls, "getClassLoader",
+		"()Ljava/lang/ClassLoader;");
+	loader = (*env)->CallObjectMethod (env, activity, get_cl);
+	loader_cls = (*env)->GetObjectClass (env, loader);
+	load_class = (*env)->GetMethodID (env, loader_cls, "loadClass",
+		"(Ljava/lang/String;)Ljava/lang/Class;");
+	jname = (*env)->NewStringUTF (env, name);
+	result = (jclass) (*env)->CallObjectMethod (env, loader, load_class, jname);
+	(*env)->DeleteLocalRef (env, jname);
+	(*env)->DeleteLocalRef (env, loader_cls);
+	(*env)->DeleteLocalRef (env, loader);
+	(*env)->DeleteLocalRef (env, activity_cls);
+	return result;
+}
+
+static jobject
+wka_activity_for_widget (GtkWidget *widget)
+{
+	GtkWidget *root;
+	GdkSurface *surface;
+
+	if (widget == NULL) {
+		return NULL;
+	}
+	root = gtk_widget_get_root (widget);
+	if (root == NULL || !GTK_IS_NATIVE (root)) {
+		return NULL;
+	}
+	surface = gtk_native_get_surface (GTK_NATIVE (root));
+	if (surface == NULL || !GDK_IS_ANDROID_TOPLEVEL (surface)) {
+		return NULL;
+	}
+	return gdk_android_toplevel_get_activity (GDK_ANDROID_TOPLEVEL (surface));
+}
+
+static gboolean
+wka_cache_host_class (JNIEnv *env, jobject activity)
+{
+	jclass local;
+	JNINativeMethod natives[2];
+
+	if (wka_host_cls_global != NULL) {
+		return TRUE;
+	}
+	local = wka_load_class (env, activity, "org.roojs.webkitgtk.android.WebViewHost");
+	if (local == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return FALSE;
+	}
+
+	natives[0].name = "nativeLoadChanged";
+	natives[0].signature = "(I)V";
+	natives[0].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewHost_nativeLoadChanged;
+	natives[1].name = "nativeTitleChanged";
+	natives[1].signature = "()V";
+	natives[1].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewHost_nativeTitleChanged;
+	if ((*env)->RegisterNatives (env, local, natives, 2) != 0) {
+		(*env)->ExceptionClear (env);
+		(*env)->DeleteLocalRef (env, local);
+		return FALSE;
+	}
+
+	wka_host_cls_global = (jclass) (*env)->NewGlobalRef (env, local);
+	(*env)->DeleteLocalRef (env, local);
+	return wka_host_cls_global != NULL;
+}
+
+static jclass
+wka_host_cls (JNIEnv *env)
+{
+	return wka_host_cls_global;
+}
+
+static gboolean
+wka_emit_load_idle (gpointer data)
+{
+	gint event = GPOINTER_TO_INT (data);
+
+	if (wka_load_cb != NULL) {
+		wka_load_cb (wka_cb_data, event);
+	}
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean
+wka_emit_title_idle (gpointer data)
+{
+	(void) data;
+	if (wka_title_cb != NULL) {
+		wka_title_cb (wka_cb_data);
+	}
+	return G_SOURCE_REMOVE;
+}
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeLoadChanged (JNIEnv *env,
+                                                                jclass cls,
+                                                                jint load_event)
+{
+	(void) env;
+	(void) cls;
+	g_idle_add (wka_emit_load_idle, GINT_TO_POINTER ((gint) load_event));
+}
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeTitleChanged (JNIEnv *env, jclass cls)
+{
+	(void) env;
+	(void) cls;
+	g_idle_add (wka_emit_title_idle, NULL);
+}
+
+void
+wka_host_set_event_handlers (WkaLoadChangedCb load_changed,
+                             WkaTitleCb title_changed,
+                             gpointer user_data)
+{
+	wka_load_cb = load_changed;
+	wka_title_cb = title_changed;
+	wka_cb_data = user_data;
+}
+
+gboolean
+wka_host_create_with_xywh (GtkWidget *widget,
+                           int x,
+                           int y,
+                           int width,
+                           int height,
+                           const char *url)
+{
+	JNIEnv *env;
+	jobject activity;
+	jclass host_cls;
+	jmethodID mid;
+	jstring jurl;
+
+	activity = wka_activity_for_widget (widget);
+	if (activity == NULL) {
+		__android_log_print (ANDROID_LOG_WARN, WKA_LOG_TAG,
+			"create: no Activity yet (widget not realized)");
+		return FALSE;
+	}
+	env = wka_jni_env ();
+	if (env == NULL) {
+		__android_log_print (ANDROID_LOG_ERROR, WKA_LOG_TAG, "create: no JNIEnv");
+		return FALSE;
+	}
+	if (!wka_cache_host_class (env, activity)) {
+		__android_log_print (ANDROID_LOG_ERROR, WKA_LOG_TAG,
+			"create: failed to load WebViewHost class");
+		(*env)->DeleteLocalRef (env, activity);
+		return FALSE;
+	}
+	host_cls = wka_host_cls (env);
+	mid = (*env)->GetStaticMethodID (env, host_cls, "attach",
+		"(Landroid/app/Activity;IIIILjava/lang/String;)V");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		__android_log_print (ANDROID_LOG_ERROR, WKA_LOG_TAG, "create: attach method missing");
+		(*env)->ExceptionClear (env);
+		(*env)->DeleteLocalRef (env, activity);
+		return FALSE;
+	}
+	jurl = (*env)->NewStringUTF (env, url != NULL ? url : "about:blank");
+	__android_log_print (ANDROID_LOG_INFO, WKA_LOG_TAG,
+		"create: calling attach %d,%d %dx%d url=%s",
+		x, y, width, height, url != NULL ? url : "(null)");
+	(*env)->CallStaticVoidMethod (env, host_cls, mid, activity, x, y, width, height, jurl);
+	if ((*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionDescribe (env);
+		(*env)->ExceptionClear (env);
+		(*env)->DeleteLocalRef (env, jurl);
+		(*env)->DeleteLocalRef (env, activity);
+		return FALSE;
+	}
+	(*env)->DeleteLocalRef (env, jurl);
+	(*env)->DeleteLocalRef (env, activity);
+	return TRUE;
+}
+
+void
+wka_host_set_bounds_xywh (int x, int y, int width, int height)
+{
+	JNIEnv *env;
+	jclass host_cls;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	host_cls = wka_host_cls (env);
+	mid = (*env)->GetStaticMethodID (env, host_cls, "setBounds", "(IIII)V");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return;
+	}
+	(*env)->CallStaticVoidMethod (env, host_cls, mid, x, y, width, height);
+	if ((*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+	}
+}
+
+gboolean
+wka_host_navigate (const char *url)
+{
+	JNIEnv *env;
+	jclass host_cls;
+	jmethodID mid;
+	jstring jurl;
+
+	if (url == NULL || wka_host_cls_global == NULL) {
+		return FALSE;
+	}
+	env = wka_jni_env ();
+	if (env == NULL) {
+		return FALSE;
+	}
+	host_cls = wka_host_cls (env);
+	mid = (*env)->GetStaticMethodID (env, host_cls, "navigate", "(Ljava/lang/String;)V");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return FALSE;
+	}
+	jurl = (*env)->NewStringUTF (env, url);
+	(*env)->CallStaticVoidMethod (env, host_cls, mid, jurl);
+	if ((*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		(*env)->DeleteLocalRef (env, jurl);
+		return FALSE;
+	}
+	(*env)->DeleteLocalRef (env, jurl);
+	return TRUE;
+}
+
+void
+wka_host_go_back (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "goBack", "()V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+void
+wka_host_go_forward (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "goForward", "()V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+void
+wka_host_reload (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "reload", "()V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+void
+wka_host_stop (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "stopLoading", "()V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+gboolean
+wka_host_can_go_back (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+	jboolean result = JNI_FALSE;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return FALSE;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "canGoBack", "()Z");
+	if (mid != NULL) {
+		result = (*env)->CallStaticBooleanMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+	return result == JNI_TRUE;
+}
+
+gboolean
+wka_host_can_go_forward (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+	jboolean result = JNI_FALSE;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return FALSE;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "canGoForward", "()Z");
+	if (mid != NULL) {
+		result = (*env)->CallStaticBooleanMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+	return result == JNI_TRUE;
+}
+
+void
+wka_host_destroy (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "destroy", "()V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+gboolean
+wka_host_is_ready (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+	jboolean result = JNI_FALSE;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return FALSE;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "isReady", "()Z");
+	if (mid != NULL) {
+		result = (*env)->CallStaticBooleanMethod (env, wka_host_cls_global, mid);
+	}
+	(*env)->ExceptionClear (env);
+	return result == JNI_TRUE;
+}
+
+const char *
+wka_host_get_uri (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+	jstring jstr;
+	const char *utf;
+
+	wka_uri_buf[0] = '\0';
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return wka_uri_buf;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "getUri",
+		"()Ljava/lang/String;");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return wka_uri_buf;
+	}
+	jstr = (jstring) (*env)->CallStaticObjectMethod (env, wka_host_cls_global, mid);
+	if (jstr != NULL) {
+		utf = (*env)->GetStringUTFChars (env, jstr, NULL);
+		if (utf != NULL) {
+			g_strlcpy (wka_uri_buf, utf, sizeof (wka_uri_buf));
+			(*env)->ReleaseStringUTFChars (env, jstr, utf);
+		}
+		(*env)->DeleteLocalRef (env, jstr);
+	}
+	return wka_uri_buf;
+}
+
+const char *
+wka_host_get_title (void)
+{
+	JNIEnv *env;
+	jmethodID mid;
+	jstring jstr;
+	const char *utf;
+
+	wka_title_buf[0] = '\0';
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return wka_title_buf;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "getTitle",
+		"()Ljava/lang/String;");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		return wka_title_buf;
+	}
+	jstr = (jstring) (*env)->CallStaticObjectMethod (env, wka_host_cls_global, mid);
+	if (jstr != NULL) {
+		utf = (*env)->GetStringUTFChars (env, jstr, NULL);
+		if (utf != NULL) {
+			g_strlcpy (wka_title_buf, utf, sizeof (wka_title_buf));
+			(*env)->ReleaseStringUTFChars (env, jstr, utf);
+		}
+		(*env)->DeleteLocalRef (env, jstr);
+	}
+	return wka_title_buf;
+}
+
+void
+wka_host_put_is_visible (gboolean visible)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "setVisible", "(Z)V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid,
+			visible ? JNI_TRUE : JNI_FALSE);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+void
+wka_host_set_virtual_size (int width, int height)
+{
+	JNIEnv *env;
+	jmethodID mid;
+
+	env = wka_jni_env ();
+	if (env == NULL || wka_host_cls_global == NULL) {
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "setVirtualSize", "(II)V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid, width, height);
+	}
+	(*env)->ExceptionClear (env);
+}
+
+void
+wka_host_use_display_size (GtkWidget *widget)
+{
+	JNIEnv *env;
+	jobject activity;
+	jmethodID mid;
+
+	activity = wka_activity_for_widget (widget);
+	if (activity == NULL) {
+		return;
+	}
+	env = wka_jni_env ();
+	if (env == NULL) {
+		return;
+	}
+	if (!wka_cache_host_class (env, activity)) {
+		(*env)->DeleteLocalRef (env, activity);
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, wka_host_cls_global, "useDisplaySize",
+		"(Landroid/app/Activity;)V");
+	if (mid != NULL) {
+		(*env)->CallStaticVoidMethod (env, wka_host_cls_global, mid, activity);
+	}
+	(*env)->ExceptionClear (env);
+	(*env)->DeleteLocalRef (env, activity);
+}

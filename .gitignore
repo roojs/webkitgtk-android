@@ -1,0 +1,8 @@
+.pixiewood/
+.android-sdk/
+.android-tools/
+build/
+subprojects/*
+!subprojects/.gitkeep
+*.apk
+.flatpak-builder/
