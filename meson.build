@@ -116,10 +116,12 @@ if build_library
     ],
   )
 
+  # Vala-generated webkitgtk-android.h lives in this subproject's build dir.
   webkitgtk_android_dep = declare_dependency(
     link_with: webkitgtk_android_lib,
     include_directories: host_inc,
     dependencies: lib_deps,
+    compile_args: ['-I' + meson.current_build_dir()],
   )
   meson.override_dependency('webkitgtk-android-1', webkitgtk_android_dep)
 endif

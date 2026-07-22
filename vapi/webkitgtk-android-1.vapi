@@ -189,7 +189,7 @@ namespace AndroidAtspi {
 		public int get_child_count ();
 		public Accessible get_child_at_index (int index);
 		public GLib.HashTable<string, string> get_attributes ();
-		public GLib.GenericArray<string> get_interfaces ();
+		public GLib.Array<string> get_interfaces ();
 		public int get_n_actions ();
 		public string get_action_name (int index);
 		public bool do_action (int index);

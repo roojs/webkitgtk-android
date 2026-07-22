@@ -164,11 +164,11 @@ namespace AndroidAtspi
 			return ht;
 		}
 
-		public GLib.GenericArray<string> get_interfaces ()
+		public GLib.Array<string> get_interfaces ()
 		{
-			var a = new GLib.GenericArray<string> ();
+			var a = new GLib.Array<string> ();
 			for (var i = 0; i < this.ifaces.length; i++) {
-				a.add (this.ifaces.get (i));
+				a.append_val (this.ifaces.get (i));
 			}
 			return a;
 		}
