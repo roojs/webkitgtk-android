@@ -291,22 +291,32 @@ namespace WebKitGtkAndroid
 			});
 
 			this.host_area.map.connect (() => {
-				if (this.attached) {
+				if (!this.attached) {
+					int x = 0, y = 0, width = 0, height = 0;
+					if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
+						return;
+					}
+					var start_uri = this.pending_uri.length > 0 ? this.pending_uri : "about:blank";
+					if (!wka_host_create_with_xywh (this.host_area, x, y, width, height, start_uri)) {
+						return;
+					}
+					this.attached = true;
+					this.pending_uri = "";
+					AndroidAtspi.register_webview (this);
+				}
+				/* Stack show/hide unmaps GTK but Android View is a separate overlay. */
+				wka_host_put_is_visible (true);
+			});
+			this.host_area.unmap.connect (() => {
+				if (!this.attached) {
 					return;
 				}
-				int x = 0, y = 0, width = 0, height = 0;
-				if (!wka_widget_bounds_xywh (this.host_area, out x, out y, out width, out height)) {
-					return;
-				}
-				var start_uri = this.pending_uri.length > 0 ? this.pending_uri : "about:blank";
-				if (!wka_host_create_with_xywh (this.host_area, x, y, width, height, start_uri)) {
-					return;
-				}
-				this.attached = true;
-				this.pending_uri = "";
-				AndroidAtspi.register_webview (this);
+				wka_host_put_is_visible (false);
 			});
 			this.host_area.add_tick_callback (() => {
+				if (!this.host_area.get_mapped ()) {
+					return GLib.Source.CONTINUE;
+				}
 				if (!this.attached) {
 					int ax = 0, ay = 0, aw = 0, ah = 0;
 					if (wka_widget_bounds_xywh (this.host_area, out ax, out ay, out aw, out ah)) {
@@ -315,6 +325,7 @@ namespace WebKitGtkAndroid
 							this.attached = true;
 							this.pending_uri = "";
 							AndroidAtspi.register_webview (this);
+							wka_host_put_is_visible (true);
 						}
 					}
 					return GLib.Source.CONTINUE;
