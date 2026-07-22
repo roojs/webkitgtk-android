@@ -1,31 +1,5 @@
-/* Android AT-SPI-shaped facade over WebView host a11y (parallel to Win32Atspi). */
-
-[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
-extern bool wka_host_a11y_ensure ();
-[CCode (cheader_filename = "webkitgtk-android-host-api.h", has_target = false)]
-public delegate void WkaA11yForeachCb (
-	int id,
-	int parent_id,
-	int x,
-	int y,
-	int w,
-	int h,
-	string name,
-	string role,
-	string value,
-	string uri,
-	bool can_invoke,
-	bool can_set_value,
-	void* user_data
-);
-[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
-extern bool wka_host_a11y_walk_foreach (WkaA11yForeachCb cb, void* user_data);
-[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
-extern bool wka_host_a11y_invoke (int id);
-[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
-extern bool wka_host_a11y_set_value (int id, string utf8);
-[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
-extern bool wka_host_a11y_focus (int id);
+/* Android AT-SPI-shaped facade over WebView host a11y (parallel to Win32Atspi).
+ * Host a11y C bindings live in WebView.vala (same library compile unit). */
 
 namespace AndroidAtspi
 {

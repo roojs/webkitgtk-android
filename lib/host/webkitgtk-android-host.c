@@ -311,8 +311,8 @@ wka_emit_doc_response_idle (gpointer data)
 	if (wka_doc_response_cb != NULL) {
 		wka_doc_response_cb (wka_doc_response_data,
 			d->status,
-			(const char * const *) d->names,
-			(const char * const *) d->values,
+			d->names,
+			d->values,
 			d->count);
 	}
 	wka_doc_response_data_free (d);

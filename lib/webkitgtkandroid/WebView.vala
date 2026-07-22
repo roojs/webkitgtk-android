@@ -252,7 +252,7 @@ namespace WebKitGtkAndroid
 				((WebView) user_data).title = wka_host_get_title ();
 			}, this);
 			wka_host_set_document_response_handler (
-				(void*) on_document_response_cb,
+				on_document_response_cb,
 				this
 			);
 			wka_host_set_freeze_frame_handler ((rgba, width, height, user_data) => {
