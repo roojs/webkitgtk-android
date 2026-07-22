@@ -15,7 +15,9 @@ static jclass wka_host_cls_global = NULL;
 static WkaLoadChangedCb wka_load_cb = NULL;
 static WkaTitleCb wka_title_cb = NULL;
 static WkaFreezeFrameCb wka_freeze_cb = NULL;
+static WkaDocumentResponseCb wka_doc_response_cb = NULL;
 static gpointer wka_cb_data = NULL;
+static gpointer wka_doc_response_data = NULL;
 static char wka_uri_buf[4096];
 static char wka_title_buf[1024];
 static GBytes *wka_freeze_bytes = NULL;
@@ -34,6 +36,12 @@ Java_org_roojs_webkitgtk_android_WebViewHost_nativeFreezeFrame (JNIEnv *env,
                                                                 jbyteArray rgba,
                                                                 jint width,
                                                                 jint height);
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeDocumentResponse (JNIEnv *env,
+                                                                     jclass cls,
+                                                                     jint status,
+                                                                     jobjectArray jnames,
+                                                                     jobjectArray jvalues);
 
 JNIEXPORT jint
 JNI_OnLoad (JavaVM *vm, void *reserved)
@@ -144,7 +152,7 @@ static gboolean
 wka_cache_host_class (JNIEnv *env, jobject activity)
 {
 	jclass local;
-	JNINativeMethod natives[3];
+	JNINativeMethod natives[4];
 
 	if (wka_host_cls_global != NULL) {
 		return TRUE;
@@ -164,7 +172,10 @@ wka_cache_host_class (JNIEnv *env, jobject activity)
 	natives[2].name = "nativeFreezeFrame";
 	natives[2].signature = "([BII)V";
 	natives[2].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewHost_nativeFreezeFrame;
-	if ((*env)->RegisterNatives (env, local, natives, 3) != 0) {
+	natives[3].name = "nativeDocumentResponse";
+	natives[3].signature = "(I[Ljava/lang/String;[Ljava/lang/String;)V";
+	natives[3].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewHost_nativeDocumentResponse;
+	if ((*env)->RegisterNatives (env, local, natives, 4) != 0) {
 		(*env)->ExceptionClear (env);
 		(*env)->DeleteLocalRef (env, local);
 		return FALSE;
@@ -268,6 +279,106 @@ Java_org_roojs_webkitgtk_android_WebViewHost_nativeFreezeFrame (JNIEnv *env,
 	}
 }
 
+typedef struct {
+	gint status;
+	char **names;
+	char **values;
+	gsize count;
+} WkaDocResponseData;
+
+static void
+wka_doc_response_data_free (WkaDocResponseData *d)
+{
+	gsize i;
+
+	if (d == NULL) {
+		return;
+	}
+	for (i = 0; i < d->count; i++) {
+		g_free (d->names[i]);
+		g_free (d->values[i]);
+	}
+	g_free (d->names);
+	g_free (d->values);
+	g_free (d);
+}
+
+static gboolean
+wka_emit_doc_response_idle (gpointer data)
+{
+	WkaDocResponseData *d = data;
+
+	if (wka_doc_response_cb != NULL) {
+		wka_doc_response_cb (wka_doc_response_data,
+			d->status,
+			(const char * const *) d->names,
+			(const char * const *) d->values,
+			d->count);
+	}
+	wka_doc_response_data_free (d);
+	return G_SOURCE_REMOVE;
+}
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewHost_nativeDocumentResponse (JNIEnv *env,
+                                                                     jclass cls,
+                                                                     jint status,
+                                                                     jobjectArray jnames,
+                                                                     jobjectArray jvalues)
+{
+	WkaDocResponseData *d;
+	jsize n = 0;
+	jsize i;
+
+	(void) cls;
+	if (wka_doc_response_cb == NULL) {
+		return;
+	}
+
+	d = g_new0 (WkaDocResponseData, 1);
+	d->status = (gint) status;
+
+	if (jnames != NULL && jvalues != NULL) {
+		n = (*env)->GetArrayLength (env, jnames);
+		if (n > (*env)->GetArrayLength (env, jvalues)) {
+			n = (*env)->GetArrayLength (env, jvalues);
+		}
+	}
+	d->count = (gsize) n;
+	if (n > 0) {
+		d->names = g_new0 (char *, (gsize) n);
+		d->values = g_new0 (char *, (gsize) n);
+		for (i = 0; i < n; i++) {
+			jstring jn = (jstring) (*env)->GetObjectArrayElement (env, jnames, i);
+			jstring jv = (jstring) (*env)->GetObjectArrayElement (env, jvalues, i);
+			const char *cn = "";
+			const char *cv = "";
+			if (jn != NULL) {
+				cn = (*env)->GetStringUTFChars (env, jn, NULL);
+			}
+			if (jv != NULL) {
+				cv = (*env)->GetStringUTFChars (env, jv, NULL);
+			}
+			d->names[i] = g_strdup (cn != NULL ? cn : "");
+			d->values[i] = g_strdup (cv != NULL ? cv : "");
+			if (jn != NULL && cn != NULL) {
+				(*env)->ReleaseStringUTFChars (env, jn, cn);
+			}
+			if (jv != NULL && cv != NULL) {
+				(*env)->ReleaseStringUTFChars (env, jv, cv);
+			}
+			if (jn != NULL) {
+				(*env)->DeleteLocalRef (env, jn);
+			}
+			if (jv != NULL) {
+				(*env)->DeleteLocalRef (env, jv);
+			}
+		}
+	}
+
+	g_idle_add (wka_emit_doc_response_idle, d);
+}
+
 void
 wka_host_set_event_handlers (WkaLoadChangedCb load_changed,
                              WkaTitleCb title_changed,
@@ -276,6 +387,14 @@ wka_host_set_event_handlers (WkaLoadChangedCb load_changed,
 	wka_load_cb = load_changed;
 	wka_title_cb = title_changed;
 	wka_cb_data = user_data;
+}
+
+void
+wka_host_set_document_response_handler (WkaDocumentResponseCb handler,
+                                        gpointer user_data)
+{
+	wka_doc_response_cb = handler;
+	wka_doc_response_data = user_data;
 }
 
 void

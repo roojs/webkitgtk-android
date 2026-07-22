@@ -10,10 +10,15 @@ import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import org.gtk.android.ToplevelActivity;
 
@@ -47,6 +52,8 @@ public final class WebViewHost {
 	private static String currentTitle = "";
 	private static boolean ready;
 	private static boolean gtkSurfaceLowered;
+	/** Main-frame HTTP error this navigation (skip synthetic 200 on finish). */
+	private static boolean mainHttpErrorThisNav;
 
 	private WebViewHost() {
 	}
@@ -318,6 +325,7 @@ public final class WebViewHost {
 					view.loadUrl(forced);
 					return;
 				}
+				mainHttpErrorThisNav = false;
 				currentUri = url != null ? url : "";
 				Log.i(TAG, "onPageStarted " + currentUri);
 				WebViewPaintProbe.logClient("onPageStarted", currentUri);
@@ -339,6 +347,11 @@ public final class WebViewHost {
 				}
 				Log.i(TAG, "onPageFinished " + currentUri);
 				WebViewPaintProbe.logClient("onPageFinished", currentUri);
+				/* Success path: System WebView has no public 2xx header callback.
+				 * Emit 200 so CF / settle can clear after a challenge completes. */
+				if (!mainHttpErrorThisNav) {
+					emitMainDocumentResponse(200, null);
+				}
 				nativeLoadChanged(LOAD_FINISHED);
 				WebViewA11y.ensureAsync(view);
 			}
@@ -351,6 +364,18 @@ public final class WebViewHost {
 					return true;
 				}
 				return false;
+			}
+
+			@Override
+			public void onReceivedHttpError(WebView view, WebResourceRequest request,
+					WebResourceResponse errorResponse) {
+				if (request == null || !request.isForMainFrame() || errorResponse == null) {
+					return;
+				}
+				mainHttpErrorThisNav = true;
+				int status = errorResponse.getStatusCode();
+				Log.i(TAG, "onReceivedHttpError main status=" + status);
+				emitMainDocumentResponse(status, errorResponse.getResponseHeaders());
 			}
 
 			@Override
@@ -549,12 +574,36 @@ public final class WebViewHost {
 		currentTitle = "";
 	}
 
+	/**
+	 * Main-document HTTP response for Cloudflare / OLLMchat
+	 * ({@code WebView.main_document_response}).
+	 */
+	private static void emitMainDocumentResponse(int status, Map<String, String> headers) {
+		List<String> names = new ArrayList<>();
+		List<String> values = new ArrayList<>();
+		if (headers != null) {
+			for (Map.Entry<String, String> e : headers.entrySet()) {
+				if (e.getKey() == null) {
+					continue;
+				}
+				names.add(e.getKey());
+				values.add(e.getValue() != null ? e.getValue() : "");
+			}
+		}
+		nativeDocumentResponse(status,
+			names.toArray(new String[0]),
+			values.toArray(new String[0]));
+	}
+
 	private static native void nativeLoadChanged(int loadEvent);
 
 	private static native void nativeTitleChanged();
 
 	/** RGBA bytes + size; null/0 clears the GTK freeze picture. */
 	static native void nativeFreezeFrame(byte[] rgba, int width, int height);
+
+	/** Main-frame document response (status + parallel header name/value arrays). */
+	private static native void nativeDocumentResponse(int status, String[] names, String[] values);
 
 	/**
 	 * Allocate a download job for tool-path {@code download_uri} (no listener).

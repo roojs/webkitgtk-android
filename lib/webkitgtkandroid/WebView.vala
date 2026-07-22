@@ -60,6 +60,19 @@ extern void wka_host_set_event_handlers (
 	WkaTitleCb? title_changed,
 	void* user_data
 );
+[CCode (cheader_filename = "webkitgtk-android-host-api.h", has_target = false)]
+public delegate void WkaDocumentResponseCb (
+	void* user_data,
+	int status,
+	[CCode (array_length = false)] unowned string[] header_names,
+	[CCode (array_length = false)] unowned string[] header_values,
+	size_t header_count
+);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern void wka_host_set_document_response_handler (
+	WkaDocumentResponseCb? handler,
+	void* user_data
+);
 [CCode (cheader_filename = "webkitgtk-android-host-api.h")]
 extern bool wka_widget_bounds_xywh (
 	Gtk.Widget widget,
@@ -176,6 +189,17 @@ namespace WebKitGtkAndroid
 		public signal void load_changed (LoadEvent load_event);
 
 		/**
+		 * Main-frame document HTTP response (status + headers as Soup.MessageHeaders).
+		 *
+		 * WebKitGTK uses decide_policy RESPONSE; webview2-gtk / Android expose this
+		 * signal for Cloudflare challenge detection (OLLMchat).
+		 */
+		public signal void main_document_response (
+			uint status,
+			Soup.MessageHeaders headers
+		);
+
+		/**
 		 * WebKitGTK-shaped load-failed (host does not emit yet — connect is safe).
 		 */
 		public signal bool load_failed (LoadEvent load_event, string failing_uri, GLib.Error error);
@@ -227,6 +251,10 @@ namespace WebKitGtkAndroid
 			}, (user_data) => {
 				((WebView) user_data).title = wka_host_get_title ();
 			}, this);
+			wka_host_set_document_response_handler (
+				(void*) on_document_response_cb,
+				this
+			);
 			wka_host_set_freeze_frame_handler ((rgba, width, height, user_data) => {
 				var self = (WebView) user_data;
 				if (rgba == null || width <= 0 || height <= 0) {
@@ -310,8 +338,30 @@ namespace WebKitGtkAndroid
 
 		~WebView ()
 		{
+			wka_host_set_document_response_handler (null, null);
 			wka_host_set_freeze_frame_handler (null);
 			wka_host_destroy ();
+		}
+
+		private void on_document_response (uint status, Soup.MessageHeaders headers)
+		{
+			main_document_response (status, headers);
+		}
+
+		[CCode (has_target = false)]
+		private static void on_document_response_cb (
+			void* user_data,
+			int status,
+			[CCode (array_length = false)] unowned string[] header_names,
+			[CCode (array_length = false)] unowned string[] header_values,
+			size_t header_count
+		)
+		{
+			var headers = new Soup.MessageHeaders (Soup.MessageHeadersType.RESPONSE);
+			for (var i = 0; i < (int) header_count; i++) {
+				headers.append (header_names[i], header_values[i]);
+			}
+			((WebView) user_data).on_document_response ((uint) status, headers);
 		}
 
 		/**

@@ -93,6 +93,10 @@ namespace WebKitGtkAndroid {
 		public Gtk.Picture freeze_picture;
 		public WebView ();
 		public signal void load_changed (LoadEvent load_event);
+		public signal void main_document_response (
+			uint status,
+			Soup.MessageHeaders headers
+		);
 		public signal bool load_failed (LoadEvent load_event, string failing_uri, GLib.Error error);
 		public bool ready { get; }
 		public bool is_loading { get; }

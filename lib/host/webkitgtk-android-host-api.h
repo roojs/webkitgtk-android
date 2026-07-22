@@ -12,6 +12,12 @@ typedef void (*WkaLoadChangedCb) (gpointer user_data, gint load_event);
 typedef void (*WkaTitleCb) (gpointer user_data);
 /* rgba NULL / width<=0 clears freeze picture. Bytes are R8G8B8A8, stride = width*4. */
 typedef void (*WkaFreezeFrameCb) (GBytes *rgba, int width, int height, gpointer user_data);
+/* Main-frame document HTTP response (Cloudflare / OLLMchat). Arrays length = header_count. */
+typedef void (*WkaDocumentResponseCb) (gpointer user_data,
+                                       gint status,
+                                       const char * const *header_names,
+                                       const char * const *header_values,
+                                       gsize header_count);
 
 gboolean wka_host_create_with_xywh (GtkWidget *widget,
                                     int x,
@@ -37,6 +43,8 @@ void wka_host_use_display_size (GtkWidget *widget);
 void wka_host_set_event_handlers (WkaLoadChangedCb load_changed,
                                   WkaTitleCb title_changed,
                                   gpointer user_data);
+void wka_host_set_document_response_handler (WkaDocumentResponseCb handler,
+                                             gpointer user_data);
 void wka_host_set_freeze_frame_handler (WkaFreezeFrameCb cb);
 gboolean wka_host_freeze (void);
 gboolean wka_host_resume (void);
