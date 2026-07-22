@@ -57,6 +57,7 @@ lib_vala_args = [
   '--pkg=glib-2.0',
   '--pkg=gobject-2.0',
   '--pkg=libsoup-3.0',
+  '--pkg=posix',
 ]
 
 # Pure hello APK has no libsoup in Pixiewood — skip the WebView library there.
@@ -71,6 +72,7 @@ if build_library
     'lib/webkitgtkandroid/Download.vala',
     'lib/webkitgtkandroid/NetworkSession.vala',
     'lib/webkitgtkandroid/WebView.vala',
+    'lib/webkitgtkandroid/AndroidAtspi.vala',
     'lib/host/webkitgtk-android-host.c',
     'lib/host/webkitgtk-android-bounds.c',
     'lib/host/webkitgtk-android-a11y.c',

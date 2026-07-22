@@ -285,6 +285,7 @@ namespace WebKitGtkAndroid
 				}
 				this.attached = true;
 				this.pending_uri = "";
+				AndroidAtspi.register_webview (this);
 			});
 			this.host_area.add_tick_callback (() => {
 				if (!this.attached) {
@@ -294,6 +295,7 @@ namespace WebKitGtkAndroid
 						if (wka_host_create_with_xywh (this.host_area, ax, ay, aw, ah, start_uri)) {
 							this.attached = true;
 							this.pending_uri = "";
+							AndroidAtspi.register_webview (this);
 						}
 					}
 					return GLib.Source.CONTINUE;
@@ -486,6 +488,7 @@ namespace WebKitGtkAndroid
 			}
 			this.attached = true;
 			this.pending_uri = "";
+			AndroidAtspi.register_webview (this);
 		}
 
 		public void go_back ()
@@ -562,6 +565,7 @@ namespace WebKitGtkAndroid
 				}
 				this.attached = true;
 				this.pending_uri = "";
+				AndroidAtspi.register_webview (this);
 				return;
 			}
 			int x = 0, y = 0, w = 0, h = 0;
