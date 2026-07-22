@@ -155,18 +155,9 @@ namespace WebKitGtkAndroid
 		}
 
 		/**
-		 * WebKitGTK-shaped loading flag (preferred over ''loading'').
+		 * WebKitGTK-shaped loading flag.
 		 */
 		public bool is_loading {
-			get {
-				return this.loading_flag;
-			}
-		}
-
-		/**
-		 * Alias for {@link is_loading} (older name).
-		 */
-		public bool loading {
 			get {
 				return this.loading_flag;
 			}

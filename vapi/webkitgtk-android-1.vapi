@@ -96,7 +96,6 @@ namespace WebKitGtkAndroid {
 		public signal bool load_failed (LoadEvent load_event, string failing_uri, GLib.Error error);
 		public bool ready { get; }
 		public bool is_loading { get; }
-		public bool loading { get; }
 		public double estimated_load_progress { get; }
 		public unowned string get_uri ();
 		public unowned string get_title ();
