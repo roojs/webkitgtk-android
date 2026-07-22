@@ -37,6 +37,12 @@ namespace WebKitGtkAndroid {
 	}
 
 	[CCode (cheader_filename = "webkitgtk-android.h")]
+	public class JavascriptResult : GLib.Object {
+		public JavascriptResult (string text);
+		public string to_string ();
+	}
+
+	[CCode (cheader_filename = "webkitgtk-android.h")]
 	public class URIRequest : GLib.Object {
 		public string uri { get; construct; }
 		public URIRequest (string uri);
@@ -87,8 +93,11 @@ namespace WebKitGtkAndroid {
 		public Gtk.Picture freeze_picture;
 		public WebView ();
 		public signal void load_changed (LoadEvent load_event);
+		public signal bool load_failed (LoadEvent load_event, string failing_uri, GLib.Error error);
 		public bool ready { get; }
+		public bool is_loading { get; }
 		public bool loading { get; }
+		public double estimated_load_progress { get; }
 		public unowned string get_uri ();
 		public unowned string get_title ();
 		public NetworkSession get_network_session ();
@@ -97,10 +106,18 @@ namespace WebKitGtkAndroid {
 		public void go_back ();
 		public void go_forward ();
 		public void reload ();
+		public void reload_bypass_cache ();
 		public void stop_loading ();
 		public bool can_go_back ();
 		public bool can_go_forward ();
 		public void refresh_freeze ();
+		public async JavascriptResult evaluate_javascript (
+			string script,
+			ssize_t length = -1,
+			string? world_name = null,
+			string? source_uri = null,
+			GLib.Cancellable? cancellable = null
+		) throws GLib.Error;
 		protected override void size_allocate (int width, int height, int baseline);
 	}
 }

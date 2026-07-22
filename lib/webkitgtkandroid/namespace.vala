@@ -41,4 +41,22 @@ namespace WebKitGtkAndroid
 		CANCELLED,
 		FILE_DOES_NOT_EXIST
 	}
+
+	/**
+	 * Minimal WebKitGTK-shaped JS result (Android has no real evaluate_javascript).
+	 */
+	public class JavascriptResult : GLib.Object
+	{
+		private string text = "";
+
+		public JavascriptResult (string text)
+		{
+			this.text = text;
+		}
+
+		public string to_string ()
+		{
+			return this.text;
+		}
+	}
 }

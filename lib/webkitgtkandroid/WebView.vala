@@ -140,7 +140,8 @@ namespace WebKitGtkAndroid
 		private string pending_uri = "";
 		private string uri = "about:blank";
 		private string title = "";
-		private bool is_loading = false;
+		private bool loading_flag = false;
+		private double load_progress = 0.0;
 		private int last_bound_x = int.MIN;
 		private int last_bound_y = int.MIN;
 		private int last_bound_w = int.MIN;
@@ -153,13 +154,40 @@ namespace WebKitGtkAndroid
 			}
 		}
 
+		/**
+		 * WebKitGTK-shaped loading flag (preferred over ''loading'').
+		 */
+		public bool is_loading {
+			get {
+				return this.loading_flag;
+			}
+		}
+
+		/**
+		 * Alias for {@link is_loading} (older name).
+		 */
 		public bool loading {
 			get {
-				return this.is_loading;
+				return this.loading_flag;
+			}
+		}
+
+		/**
+		 * Approximate load progress (0.0…1.0). Android has no granular
+		 * progress; STARTED → 0.1, FINISHED → 1.0.
+		 */
+		public double estimated_load_progress {
+			get {
+				return this.load_progress;
 			}
 		}
 
 		public signal void load_changed (LoadEvent load_event);
+
+		/**
+		 * WebKitGTK-shaped load-failed (host does not emit yet — connect is safe).
+		 */
+		public signal bool load_failed (LoadEvent load_event, string failing_uri, GLib.Error error);
 
 		public WebView ()
 		{
@@ -185,7 +213,8 @@ namespace WebKitGtkAndroid
 				var self = (WebView) user_data;
 				switch (load_event) {
 				case (int) LoadEvent.STARTED:
-					self.is_loading = true;
+					self.loading_flag = true;
+					self.load_progress = 0.1;
 					self.load_changed (LoadEvent.STARTED);
 					break;
 				case (int) LoadEvent.REDIRECTED:
@@ -193,10 +222,12 @@ namespace WebKitGtkAndroid
 					break;
 				case (int) LoadEvent.COMMITTED:
 					self.uri = wka_host_get_uri ();
+					self.load_progress = 0.7;
 					self.load_changed (LoadEvent.COMMITTED);
 					break;
 				case (int) LoadEvent.FINISHED:
-					self.is_loading = false;
+					self.loading_flag = false;
+					self.load_progress = 1.0;
 					self.uri = wka_host_get_uri ();
 					self.title = wka_host_get_title ();
 					self.load_changed (LoadEvent.FINISHED);
@@ -472,9 +503,39 @@ namespace WebKitGtkAndroid
 			wka_host_reload ();
 		}
 
+		/**
+		 * WebKitGTK-shaped reload (Android System WebView has no bypass-cache API).
+		 */
+		public void reload_bypass_cache ()
+		{
+			wka_host_reload ();
+		}
+
 		public void stop_loading ()
 		{
 			wka_host_stop ();
+		}
+
+		/**
+		 * WebKitGTK-shaped JS eval — not implemented on Android (settle probe
+		 * catches the error; a11y dump must not use this).
+		 *
+		 * @param script JavaScript source
+		 * @param length byte length or -1 for null-terminated
+		 * @param world_name unused
+		 * @param source_uri unused
+		 * @param cancellable optional cancel
+		 * @throws GLib.Error always (not supported)
+		 */
+		public async JavascriptResult evaluate_javascript (
+			string script,
+			ssize_t length = -1,
+			string? world_name = null,
+			string? source_uri = null,
+			GLib.Cancellable? cancellable = null
+		) throws GLib.Error
+		{
+			throw new NetworkError.FAILED ("evaluate_javascript not supported on Android");
 		}
 
 		public bool can_go_back ()
