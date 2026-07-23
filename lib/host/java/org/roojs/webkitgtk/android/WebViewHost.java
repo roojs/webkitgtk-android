@@ -52,6 +52,8 @@ public final class WebViewHost {
 	private static String currentTitle = "";
 	private static boolean ready;
 	private static boolean gtkSurfaceLowered;
+	/** False while globe-off / stack-hidden — WebView stays VISIBLE but parked. */
+	private static boolean contentVisible = true;
 	/** Main-frame HTTP error this navigation (skip synthetic 200 on finish). */
 	private static boolean mainHttpErrorThisNav;
 
@@ -143,6 +145,11 @@ public final class WebViewHost {
 		return wv != null && wv.canGoForward();
 	}
 
+	/**
+	 * Globe-off / stack-hide: keep the WebView {@link View#VISIBLE} and park it
+	 * off-screen (same translation as freeze). {@link View#INVISIBLE} empties
+	 * Chromium's a11y tree — see docs/bugs/2026-07-23-offscreen-a11y-empty-tree.md.
+	 */
 	public static void setVisible(boolean visible) {
 		Activity act = activity;
 		if (act == null) {
@@ -152,8 +159,33 @@ public final class WebViewHost {
 			if (webView == null) {
 				return;
 			}
-			webView.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
-			setGtkSurfaceOnTop(!visible);
+			contentVisible = visible;
+			if (visible) {
+				if (!WebViewFreeze.isFrozen()) {
+					webView.setTranslationX(0f);
+					webView.setClickable(true);
+					webView.setFocusable(true);
+					webView.setFocusableInTouchMode(true);
+					webView.setEnabled(true);
+					webView.bringToFront();
+				}
+				webView.setVisibility(View.VISIBLE);
+				setGtkSurfaceOnTop(false);
+				gtkSurfaceLowered = true;
+				Log.i(TAG, "setVisible true wh=" + webView.getWidth() + "x"
+					+ webView.getHeight() + " tx=" + webView.getTranslationX());
+			} else {
+				/* Park off-screen; stay VISIBLE so a11y dump/fill/press keep working. */
+				webView.setTranslationX(WebViewFreeze.PARK_TRANSLATION_X);
+				webView.setClickable(false);
+				webView.setFocusable(false);
+				webView.setFocusableInTouchMode(false);
+				webView.setEnabled(false);
+				webView.setVisibility(View.VISIBLE);
+				setGtkSurfaceOnTop(true);
+				Log.i(TAG, "setVisible false (parked) wh=" + webView.getWidth() + "x"
+					+ webView.getHeight() + " tx=" + webView.getTranslationX());
+			}
 		});
 	}
 
@@ -260,6 +292,11 @@ public final class WebViewHost {
 		return webView;
 	}
 
+	/** True when the GTK host wants the page shown (globe on). */
+	public static boolean isContentVisible() {
+		return contentVisible;
+	}
+
 	/** Modal freeze — see WebViewFreeze / docs/freeze.md. */
 	public static void freeze() {
 		WebViewFreeze.enter();
@@ -272,7 +309,7 @@ public final class WebViewHost {
 	/** Package: raise/lower GTK SurfaceView during freeze. */
 	static void setGtkSurfaceOnTopForFreeze(boolean onTop) {
 		setGtkSurfaceOnTop(onTop);
-		if (!onTop && webView != null) {
+		if (!onTop && webView != null && contentVisible) {
 			webView.setVisibility(View.VISIBLE);
 			webView.bringToFront();
 			gtkSurfaceLowered = true;
@@ -444,11 +481,19 @@ public final class WebViewHost {
 		lastH = lp.height;
 		webView.setLayoutParams(lp);
 		webView.setVisibility(View.VISIBLE);
-		if (WebViewFreeze.isFrozen()) {
-			/* Keep parked off-screen — do not steal touches from GTK dialogs. */
+		if (WebViewFreeze.isFrozen() || !contentVisible) {
+			/* Keep parked off-screen — do not steal touches from GTK. */
 			webView.setTranslationX(WebViewFreeze.PARK_TRANSLATION_X);
+			webView.setClickable(false);
+			webView.setFocusable(false);
+			webView.setFocusableInTouchMode(false);
+			webView.setEnabled(false);
 		} else {
 			webView.setTranslationX(0f);
+			webView.setClickable(true);
+			webView.setFocusable(true);
+			webView.setFocusableInTouchMode(true);
+			webView.setEnabled(true);
 			webView.bringToFront();
 			if (!gtkSurfaceLowered) {
 				setGtkSurfaceOnTop(false);
@@ -456,7 +501,9 @@ public final class WebViewHost {
 			}
 		}
 		Log.i(TAG, "setBounds contentView " + lp.leftMargin + "," + lp.topMargin
-			+ " " + lp.width + "x" + lp.height);
+			+ " " + lp.width + "x" + lp.height
+			+ " contentVisible=" + contentVisible
+			+ " frozen=" + WebViewFreeze.isFrozen());
 	}
 
 	/**

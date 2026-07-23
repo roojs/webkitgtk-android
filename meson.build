@@ -131,7 +131,6 @@ if get_option('android_browser')
     'webkitgtk-android-browser',
     files(
       'examples/browser/main.vala',
-      'examples/browser/host-a11y.vala',
     ),
     dependencies: [webkitgtk_android_dep, adw_dep],
     vala_args: lib_vala_args + ['--pkg=libadwaita-1'],

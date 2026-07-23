@@ -91,11 +91,20 @@ typedef void (*WkaA11yForeachCb) (
 	gpointer user_data
 );
 
-/* Android-only: wake Chromium a11y provider without TalkBack. */
+/* Android-only: wake Chromium a11y provider without TalkBack.
+ * Sync ensure/walk are safe only on the Android UI thread. From GLib/GTK
+ * use wka_host_a11y_walk_foreach_async (see docs/a11y.md). */
 gboolean wka_host_a11y_ensure (void);
 gboolean wka_host_a11y_walk (wka_a11y_node **nodes_out, gsize *count_out);
 void wka_host_a11y_nodes_free (wka_a11y_node *nodes, gsize count);
 gboolean wka_host_a11y_walk_foreach (WkaA11yForeachCb cb, gpointer user_data);
+
+/* Preferred from GLib/GTK: UI collect → g_idle → row_cb × N → done_cb. */
+typedef void (*WkaA11yWalkDoneCb) (gboolean ok, gpointer user_data);
+void wka_host_a11y_walk_foreach_async (WkaA11yForeachCb row_cb,
+                                       WkaA11yWalkDoneCb done_cb,
+                                       gpointer user_data);
+
 gboolean wka_host_a11y_invoke (int id);
 gboolean wka_host_a11y_set_value (int id, const char *utf8);
 gboolean wka_host_a11y_focus (int id);

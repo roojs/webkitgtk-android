@@ -2,13 +2,19 @@
  *
  * Phase 2/3 browser demo — GTK chrome + Android System WebView + a11y dump.
  * Default URL: https://roojs.com/index.php (avoids http redirect)
+ *
+ * A11y follows OLLMchat libocwebkit/A11y.vala:
+ *   using AndroidAtspi; yield refresh_async(); get_desktop(0); …
+ * Dump hidden switches a Gtk.Stack (globe-off) so WebView unmap → host hide.
  */
 
 using Gtk;
 using WebKitGtkAndroid;
+using AndroidAtspi;
 
 private WebView web;
 private Gtk.Entry url_entry;
+private Gtk.Stack view_stack;
 
 private void sync_url_entry ()
 {
@@ -22,24 +28,39 @@ private void sync_url_entry ()
 
 private int a11y_node_count;
 
-private void a11y_dump_line (
-	int id,
-	int parent_id,
-	int x,
-	int y,
-	int w,
-	int h,
-	string name,
-	string role,
-	string value,
-	string uri,
-	bool can_invoke,
-	bool can_set_value,
-	void* user_data
-)
+private void a11y_collect (AndroidAtspi.Accessible acc, int parent_id, StringBuilder sb)
 {
-	unowned StringBuilder sb = (StringBuilder) user_data;
+	var id = a11y_node_count;
 	a11y_node_count++;
+	var ext = acc.get_extents (CoordType.SCREEN);
+	var name = acc.get_name () ?? "";
+	var role = acc.get_role_name () ?? "";
+	var value = "";
+	var uri = "";
+	var text = acc.get_text_iface ();
+	if (text != null && text.get_character_count () > 0) {
+		value = text.get_text (0, -1);
+	}
+	var link = acc.get_hyperlink ();
+	if (link != null && link.get_n_anchors () > 0) {
+		uri = link.get_uri (0);
+	}
+	bool can_invoke = false;
+	for (var i = 0; i < acc.get_n_actions (); i++) {
+		var an = acc.get_action_name (i);
+		if (an == "default.activate" || an == "click") {
+			can_invoke = true;
+		}
+	}
+	bool can_set = false;
+	var ifaces = acc.get_interfaces ();
+	for (var i = 0; i < ifaces.length; i++) {
+		if (ifaces.index (i) == "EditableText") {
+			can_set = true;
+			break;
+		}
+	}
+
 	sb.append_printf (
 		"[%d] parent=%d role=%s name=\"%s\" value=\"%s\" uri=\"%s\" "
 		+ "bounds=%d,%d %dx%d invoke=%s set_value=%s\n",
@@ -49,13 +70,18 @@ private void a11y_dump_line (
 		name,
 		value,
 		uri,
-		x,
-		y,
-		w,
-		h,
+		ext.x,
+		ext.y,
+		ext.width,
+		ext.height,
 		can_invoke.to_string (),
-		can_set_value.to_string ()
+		can_set.to_string ()
 	);
+
+	var n = acc.get_child_count ();
+	for (var i = 0; i < n; i++) {
+		a11y_collect (acc.get_child_at_index (i), id, sb);
+	}
 }
 
 private string a11y_preview (string full, int max_lines)
@@ -85,27 +111,89 @@ private void show_a11y_dialog (Gtk.Window? parent, string title, string body)
 	dialog.present (parent);
 }
 
-private void dump_a11y (Gtk.Window? parent)
+/* Same handoff as OLLMchat A11y.dump on Android. */
+private async string? run_a11y_dump_async (out int count) throws GLib.Error
 {
-	var sb = new StringBuilder ();
+	count = 0;
 	a11y_node_count = 0;
-	/* Host a11y — same split as webview2-gtk (not methods on WebView). */
-	if (!wka_host_a11y_ensure ()) {
-		print ("a11y ensure failed\n");
-		show_a11y_dialog (parent, "A11y dump", "ensure failed (see logcat WebViewA11y)");
-		return;
+	yield refresh_async ();
+	var desktop = get_desktop (0);
+	AndroidAtspi.Accessible? app = null;
+	for (var i = 0; i < desktop.get_child_count (); i++) {
+		var candidate = desktop.get_child_at_index (i);
+		if (candidate.get_process_id () != (uint) Posix.getpid ()) {
+			continue;
+		}
+		app = candidate;
+		break;
 	}
-	if (!wka_host_a11y_walk_foreach (a11y_dump_line, sb)) {
+	if (app == null) {
+		throw new GLib.IOError.FAILED ("a11y: no application for pid");
+	}
+	var sb = new StringBuilder ();
+	a11y_collect (app, -1, sb);
+	count = a11y_node_count;
+	if (count <= 0) {
 		print ("a11y walk failed (empty tree?)\n");
-		show_a11y_dialog (parent, "A11y dump", "walk failed — empty tree?");
-		return;
+		return null;
 	}
 	print ("=== a11y dump ===\n%s=== end ===\n", sb.str);
-	var body = "%d nodes (also in logcat: print / WebViewA11y)\n\n%s".printf (
-		a11y_node_count,
-		a11y_preview (sb.str, 12)
-	);
-	show_a11y_dialog (parent, "A11y dump", body);
+	return sb.str;
+}
+
+private async void dump_a11y_async (Gtk.Window? parent)
+{
+	try {
+		int count = 0;
+		var dump = yield run_a11y_dump_async (out count);
+		if (dump == null) {
+			show_a11y_dialog (parent, "A11y dump", "empty tree (see logcat WebViewA11y)");
+			return;
+		}
+		var body = "%d nodes (AndroidAtspi.refresh_async)\n\n%s".printf (
+			count,
+			a11y_preview (dump, 12)
+		);
+		show_a11y_dialog (parent, "A11y dump", body);
+	} catch (GLib.Error e) {
+		print ("a11y dump failed: %s\n", e.message);
+		show_a11y_dialog (parent, "A11y dump", e.message);
+	}
+}
+
+/* Globe-off: Stack shows chat stub → WebView unmaps → host put_is_visible(false). */
+private async void dump_a11y_hidden_async (Gtk.Window? parent)
+{
+	print ("a11y hidden: stack → chat (unmap WebView)\n");
+	view_stack.visible_child_name = "chat";
+	Timeout.add (800, () => {
+		dump_a11y_hidden_continue.begin (parent);
+		return GLib.Source.REMOVE;
+	});
+}
+
+private async void dump_a11y_hidden_continue (Gtk.Window? parent)
+{
+	try {
+		int count = 0;
+		var dump = yield run_a11y_dump_async (out count);
+		view_stack.visible_child_name = "browser";
+		print ("a11y hidden: stack → browser restored; nodes=%d\n", count);
+		if (dump == null) {
+			show_a11y_dialog (parent, "A11y dump (hidden)",
+				"empty tree while hidden (see logcat WebViewA11y)");
+			return;
+		}
+		var body = "HIDDEN dump: %d nodes\n\n%s".printf (
+			count,
+			a11y_preview (dump, 12)
+		);
+		show_a11y_dialog (parent, "A11y dump (hidden)", body);
+	} catch (GLib.Error e) {
+		view_stack.visible_child_name = "browser";
+		print ("a11y hidden dump failed: %s\n", e.message);
+		show_a11y_dialog (parent, "A11y dump (hidden)", e.message);
+	}
 }
 
 public class BrowserApplication : Adw.Application
@@ -130,11 +218,15 @@ public class BrowserApplication : Adw.Application
 		window.set_default_size (420, 720);
 
 		var root = new Gtk.Box (Gtk.Orientation.VERTICAL, 0);
-		var bar = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 4) {
+		var chrome = new Gtk.Box (Gtk.Orientation.VERTICAL, 0) {
 			margin_start = 4,
 			margin_end = 4,
 			margin_top = 4,
 			margin_bottom = 4
+		};
+		var nav_bar = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 4);
+		var test_bar = new Gtk.Box (Gtk.Orientation.HORIZONTAL, 4) {
+			margin_top = 4
 		};
 
 		var back_btn = new Gtk.Button.from_icon_name ("go-previous-symbolic");
@@ -146,6 +238,7 @@ public class BrowserApplication : Adw.Application
 		};
 		var go_btn = new Gtk.Button.with_label ("Go");
 		var a11y_btn = new Gtk.Button.with_label ("Dump a11y");
+		var a11y_hid_btn = new Gtk.Button.with_label ("Dump hidden");
 		var dl_btn = new Gtk.Button.with_label ("Download");
 
 		web = new WebView ();
@@ -186,6 +279,19 @@ public class BrowserApplication : Adw.Application
 			});
 		});
 
+		var chat_stub = new Gtk.Label ("Chat (globe off — WebView unmapped)") {
+			hexpand = true,
+			vexpand = true
+		};
+		view_stack = new Gtk.Stack () {
+			hexpand = true,
+			vexpand = true,
+			transition_type = Gtk.StackTransitionType.NONE
+		};
+		view_stack.add_named (web, "browser");
+		view_stack.add_named (chat_stub, "chat");
+		view_stack.visible_child_name = "browser";
+
 		back_btn.clicked.connect (() => {
 			web.go_back ();
 			sync_url_entry ();
@@ -204,7 +310,10 @@ public class BrowserApplication : Adw.Application
 			web.load_uri (url_entry.text);
 		});
 		a11y_btn.clicked.connect (() => {
-			dump_a11y (window);
+			dump_a11y_async.begin (window);
+		});
+		a11y_hid_btn.clicked.connect (() => {
+			dump_a11y_hidden_async.begin (window);
 		});
 		dl_btn.clicked.connect (() => {
 			var url = url_entry.text.strip ();
@@ -215,16 +324,20 @@ public class BrowserApplication : Adw.Application
 			web.download_uri (url);
 		});
 
-		bar.append (back_btn);
-		bar.append (fwd_btn);
-		bar.append (reload_btn);
-		bar.append (url_entry);
-		bar.append (go_btn);
-		bar.append (a11y_btn);
-		bar.append (dl_btn);
+		nav_bar.append (back_btn);
+		nav_bar.append (fwd_btn);
+		nav_bar.append (reload_btn);
+		nav_bar.append (url_entry);
+		nav_bar.append (go_btn);
 
-		root.append (bar);
-		root.append (web);
+		test_bar.append (a11y_btn);
+		test_bar.append (a11y_hid_btn);
+		test_bar.append (dl_btn);
+
+		chrome.append (nav_bar);
+		chrome.append (test_bar);
+		root.append (chrome);
+		root.append (view_stack);
 		window.set_content (root);
 		window.present ();
 	}

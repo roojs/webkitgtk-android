@@ -102,6 +102,10 @@ public delegate void WkaA11yForeachCb (
 );
 [CCode (cheader_filename = "webkitgtk-android-host-api.h")]
 extern bool wka_host_a11y_walk_foreach (WkaA11yForeachCb cb, void* user_data);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h", has_target = false)]
+public delegate void WkaA11yWalkDoneCb (bool ok, void* user_data);
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern void wka_host_a11y_walk_foreach_async (WkaA11yForeachCb row_cb, WkaA11yWalkDoneCb done_cb, void* user_data);
 [CCode (cheader_filename = "webkitgtk-android-host-api.h")]
 extern bool wka_host_a11y_invoke (int id);
 [CCode (cheader_filename = "webkitgtk-android-host-api.h")]

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
@@ -28,6 +29,11 @@ import java.util.Map;
  * ViewRootImpl DirectConnection so {@link AccessibilityManager#isEnabled()}
  * is true in-process. Chromium still gates on its state listener — we notify
  * those listeners after the DirectConnection is up.
+ *
+ * Threading: ensure/walk/provider APIs must run on the Android UI thread.
+ * Sync {@link #walk()} from the GTK thread deadlocks with
+ * {@code GlibContext.blockForMain} (IME). GLib callers use
+ * {@link #walkAsync(long)} → nativeWalkDone → GLib idle (see docs/a11y.md).
  */
 public final class WebViewA11y {
 	private static final String TAG = "WebViewA11y";
@@ -56,14 +62,23 @@ public final class WebViewA11y {
 	private WebViewA11y() {
 	}
 
+	private static boolean onUiThread() {
+		return Looper.myLooper() == Looper.getMainLooper();
+	}
+
 	/**
 	 * App-process force-on for Chromium WebView a11y (no AccessibilityService).
-	 * Safe to call from the UI thread after the WebView is attached.
+	 * Must run on the Android UI thread after the WebView is attached.
+	 * Off-UI callers get false (use {@link #ensureAsync} or walkAsync).
 	 */
 	public static boolean ensure() {
 		WebView wv = WebViewHost.getWebView();
 		if (wv == null) {
 			Log.w(TAG, "ensure: no WebView");
+			return false;
+		}
+		if (!onUiThread()) {
+			Log.e(TAG, "ensure: called off UI thread — refusing (deadlock risk)");
 			return false;
 		}
 		if (wv.getWindowToken() == null) {
@@ -81,7 +96,10 @@ public final class WebViewA11y {
 		 *    Must use an unsealed node — obtain()+onInitialize…, not create…. */
 		boolean linked = linkDirectConnection(wv);
 		boolean a11yOn = am != null && am.isEnabled();
-		Log.i(TAG, "ensure: linked=" + linked + " AccessibilityManager.isEnabled=" + a11yOn);
+		Log.i(TAG, "ensure: linked=" + linked + " AccessibilityManager.isEnabled=" + a11yOn
+			+ " vis=" + wv.getVisibility()
+			+ " wh=" + wv.getWidth() + "x" + wv.getHeight()
+			+ " tx=" + wv.getTranslationX());
 
 		/* 2) Chromium listens for AccessibilityStateChange — DirectConnection
 		 *    flips isEnabled() but does not always fire the listener. */
@@ -192,7 +210,41 @@ public final class WebViewA11y {
 		}
 	}
 
+	/**
+	 * Sync walk — Android UI thread only. From GTK/GLib use {@link #walkAsync}.
+	 */
 	public static synchronized Node[] walk() {
+		if (!onUiThread()) {
+			Log.e(TAG, "walk: called off UI thread — refusing sync WebView a11y (deadlock risk)");
+			return new Node[0];
+		}
+		return walkOnUiThread();
+	}
+
+	/**
+	 * Schedule walk on the WebView looper; delivers via {@link #nativeWalkDone}.
+	 * Does not block the caller — safe from the GTK thread.
+	 */
+	public static void walkAsync(final long cookie) {
+		WebView wv = WebViewHost.getWebView();
+		if (wv == null) {
+			Log.w(TAG, "walkAsync: no WebView cookie=" + cookie);
+			nativeWalkDone(new Node[0], cookie);
+			return;
+		}
+		wv.post(() -> {
+			Node[] nodes;
+			synchronized (WebViewA11y.class) {
+				nodes = walkOnUiThread();
+			}
+			Log.i(TAG, "walkAsync: " + nodes.length + " nodes cookie=" + cookie);
+			nativeWalkDone(nodes, cookie);
+		});
+	}
+
+	private static native void nativeWalkDone(Node[] nodes, long cookie);
+
+	private static Node[] walkOnUiThread() {
 		clearCache();
 		lastWalk.clear();
 		WebView wv = WebViewHost.getWebView();
@@ -218,6 +270,14 @@ public final class WebViewA11y {
 		return lastWalk.toArray(new Node[0]);
 	}
 
+	private static void runOnUi(WebView wv, Runnable r) {
+		if (onUiThread()) {
+			r.run();
+		} else {
+			wv.post(r);
+		}
+	}
+
 	private static AccessibilityNodeInfo obtainRoot(
 		WebView wv,
 		AccessibilityNodeProvider provider
@@ -233,7 +293,20 @@ public final class WebViewA11y {
 		return wv.createAccessibilityNodeInfo();
 	}
 
-	public static synchronized boolean invoke(int id) {
+	public static boolean invoke(int id) {
+		WebView wv = WebViewHost.getWebView();
+		if (wv == null) {
+			return false;
+		}
+		if (onUiThread()) {
+			return invokeOnUi(id);
+		}
+		/* Fire-and-forget on UI — do not block GTK (ANR with blockForMain). */
+		runOnUi(wv, () -> invokeOnUi(id));
+		return true;
+	}
+
+	private static synchronized boolean invokeOnUi(int id) {
 		AccessibilityNodeInfo n = cacheGet(id);
 		if (n == null) {
 			return false;
@@ -243,7 +316,20 @@ public final class WebViewA11y {
 		return ok;
 	}
 
-	public static synchronized boolean setValue(int id, String utf8) {
+	public static boolean setValue(int id, String utf8) {
+		WebView wv = WebViewHost.getWebView();
+		if (wv == null) {
+			return false;
+		}
+		final String text = utf8;
+		if (onUiThread()) {
+			return setValueOnUi(id, text);
+		}
+		runOnUi(wv, () -> setValueOnUi(id, text));
+		return true;
+	}
+
+	private static synchronized boolean setValueOnUi(int id, String utf8) {
 		AccessibilityNodeInfo n = cacheGet(id);
 		if (n == null) {
 			return false;
@@ -262,7 +348,19 @@ public final class WebViewA11y {
 		return ok;
 	}
 
-	public static synchronized boolean focus(int id) {
+	public static boolean focus(int id) {
+		WebView wv = WebViewHost.getWebView();
+		if (wv == null) {
+			return false;
+		}
+		if (onUiThread()) {
+			return focusOnUi(id);
+		}
+		runOnUi(wv, () -> focusOnUi(id));
+		return true;
+	}
+
+	private static synchronized boolean focusOnUi(int id) {
 		AccessibilityNodeInfo n = cacheGet(id);
 		if (n == null) {
 			return false;
@@ -301,10 +399,21 @@ public final class WebViewA11y {
 		n.parentId = parentId;
 		Rect r = new Rect();
 		el.getBoundsInScreen(r);
-		n.x = r.left;
-		n.y = r.top;
+		/* Globe-off parks via translationX — report layout-space bounds so
+		 * markdown {x,y} and size stay phone-relative (not 100000+). */
+		WebView wv = WebViewHost.getWebView();
+		int tx = wv != null ? Math.round(wv.getTranslationX()) : 0;
+		int ty = wv != null ? Math.round(wv.getTranslationY()) : 0;
+		n.x = r.left - tx;
+		n.y = r.top - ty;
 		n.w = r.width();
 		n.h = r.height();
+		if (n.w < 0) {
+			n.w = 0;
+		}
+		if (n.h < 0) {
+			n.h = 0;
+		}
 
 		CharSequence nameCs = el.getContentDescription();
 		if (nameCs == null || nameCs.length() == 0) {

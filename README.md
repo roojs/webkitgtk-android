@@ -21,7 +21,7 @@ web.load_uri ("https://roojs.com/");
 
 - **Phase 1 ✅** — GTK Hello World APK
 - **Phase 2 ✅** — WebView embed + display
-- **Phase 3 ✔️** — a11y dump / fill / press (await device **✅**)
+- **Phase 3 ✔️** — a11y dump / fill / press (await device **✅**). Caller threads: [`docs/a11y.md`](docs/a11y.md) (async from GLib/GTK).
 - **Downloads ✔️** — engine API (see [`docs/plans/1.1-downloads.md`](docs/plans/1.1-downloads.md))
 - **Packaging ✔️** — `libwebkitgtk-android-1` + pkg-config / VAPI (see [`docs/android-build.md`](docs/android-build.md))
 

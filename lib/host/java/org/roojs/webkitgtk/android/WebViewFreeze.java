@@ -102,7 +102,8 @@ public final class WebViewFreeze {
 		if (wv != null) {
 			unpark(wv);
 		}
-		WebViewHost.setGtkSurfaceOnTopForFreeze(false);
+		/* Stay SurfaceView-on-top while globe-off (content parked). */
+		WebViewHost.setGtkSurfaceOnTopForFreeze(!WebViewHost.isContentVisible());
 		WebViewHost.nativeFreezeFrame(null, 0, 0);
 	}
 
@@ -116,6 +117,11 @@ public final class WebViewFreeze {
 	}
 
 	private static void unpark(WebView wv) {
+		/* Globe-off keeps contentVisible=false — stay parked after freeze exit. */
+		if (!WebViewHost.isContentVisible()) {
+			parkOffscreen(wv);
+			return;
+		}
 		wv.setTranslationX(0f);
 		wv.setClickable(true);
 		wv.setFocusable(true);

@@ -1,4 +1,5 @@
-/* JNI bridge for WebViewA11y — mirrors webview2-gtk a11y_walk shape. */
+/* JNI bridge for WebViewA11y — mirrors webview2-gtk a11y_walk shape.
+ * Sync walk is Android-UI only; GLib/GTK use walk_foreach_async (docs/a11y.md). */
 
 #include "webkitgtk-android-host-api.h"
 
@@ -14,6 +15,30 @@ JNIEnv *wka_get_env (void);
 jclass wka_get_host_class (void);
 
 static jclass wka_a11y_cls = NULL;
+static guint wka_walk_cookie_seq = 1;
+static GHashTable *wka_walk_pending = NULL; /* cookie → WkaWalkPending* */
+
+typedef struct {
+	WkaA11yForeachCb row_cb;
+	WkaA11yWalkDoneCb done_cb;
+	gpointer user_data;
+} WkaWalkPending;
+
+typedef struct {
+	guint cookie;
+	wka_a11y_node *nodes;
+	gsize count;
+	gboolean ok;
+} WkaWalkIdle;
+
+static void
+wka_a11y_register_natives (JNIEnv *env, jclass cls);
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewA11y_nativeWalkDone (JNIEnv *env,
+                                                             jclass cls,
+                                                             jobjectArray arr,
+                                                             jlong cookie);
 
 static jclass
 wka_a11y_class (JNIEnv *env)
@@ -53,9 +78,25 @@ wka_a11y_class (JNIEnv *env)
 		(*env)->ExceptionClear (env);
 		return NULL;
 	}
+	wka_a11y_register_natives (env, local);
 	wka_a11y_cls = (jclass) (*env)->NewGlobalRef (env, local);
 	(*env)->DeleteLocalRef (env, local);
 	return wka_a11y_cls;
+}
+
+static void
+wka_a11y_register_natives (JNIEnv *env, jclass cls)
+{
+	JNINativeMethod natives[1];
+
+	natives[0].name = "nativeWalkDone";
+	natives[0].signature = "([Lorg/roojs/webkitgtk/android/WebViewA11y$Node;J)V";
+	natives[0].fnPtr = (void *) Java_org_roojs_webkitgtk_android_WebViewA11y_nativeWalkDone;
+	if ((*env)->RegisterNatives (env, cls, natives, 1) != 0) {
+		(*env)->ExceptionClear (env);
+		__android_log_print (ANDROID_LOG_ERROR, WKA_A11Y_LOG_TAG,
+			"RegisterNatives nativeWalkDone failed");
+	}
 }
 
 static char *
@@ -245,6 +286,140 @@ wka_host_a11y_walk_foreach (WkaA11yForeachCb cb, gpointer user_data)
 	}
 	wka_host_a11y_nodes_free (nodes, count);
 	return TRUE;
+}
+
+static gboolean
+wka_walk_idle (gpointer data)
+{
+	WkaWalkIdle *idle = data;
+	WkaWalkPending *pending = NULL;
+	gsize i;
+
+	if (wka_walk_pending != NULL) {
+		pending = g_hash_table_lookup (wka_walk_pending,
+			GUINT_TO_POINTER (idle->cookie));
+		if (pending != NULL) {
+			g_hash_table_remove (wka_walk_pending,
+				GUINT_TO_POINTER (idle->cookie));
+		}
+	}
+
+	if (pending != NULL && idle->ok && pending->row_cb != NULL && idle->nodes != NULL) {
+		for (i = 0; i < idle->count; i++) {
+			wka_a11y_node *n = &idle->nodes[i];
+			pending->row_cb (
+				n->id,
+				n->parent_id,
+				n->x,
+				n->y,
+				n->w,
+				n->h,
+				n->name != NULL ? n->name : "",
+				n->role != NULL ? n->role : "",
+				n->value != NULL ? n->value : "",
+				n->uri != NULL ? n->uri : "",
+				n->can_invoke,
+				n->can_set_value,
+				pending->user_data
+			);
+		}
+	}
+	if (pending != NULL && pending->done_cb != NULL) {
+		pending->done_cb (idle->ok, pending->user_data);
+	}
+	g_free (pending);
+	wka_host_a11y_nodes_free (idle->nodes, idle->count);
+	g_free (idle);
+	return G_SOURCE_REMOVE;
+}
+
+static void
+wka_walk_schedule_fail (guint cookie)
+{
+	WkaWalkIdle *idle;
+
+	idle = g_new0 (WkaWalkIdle, 1);
+	idle->cookie = cookie;
+	idle->ok = FALSE;
+	g_idle_add (wka_walk_idle, idle);
+}
+
+JNIEXPORT void JNICALL
+Java_org_roojs_webkitgtk_android_WebViewA11y_nativeWalkDone (JNIEnv *env,
+                                                             jclass cls,
+                                                             jobjectArray arr,
+                                                             jlong cookie)
+{
+	WkaWalkIdle *idle;
+	jsize n = 0;
+	jsize i;
+
+	(void) cls;
+	idle = g_new0 (WkaWalkIdle, 1);
+	idle->cookie = (guint) cookie;
+	idle->ok = TRUE;
+	if (arr != NULL) {
+		n = (*env)->GetArrayLength (env, arr);
+	}
+	if (n > 0) {
+		idle->nodes = g_new0 (wka_a11y_node, (gsize) n);
+		idle->count = (gsize) n;
+		for (i = 0; i < n; i++) {
+			jobject jn = (*env)->GetObjectArrayElement (env, arr, i);
+			wka_fill_node_from_java (env, jn, &idle->nodes[i]);
+			(*env)->DeleteLocalRef (env, jn);
+		}
+	}
+	g_idle_add (wka_walk_idle, idle);
+}
+
+void
+wka_host_a11y_walk_foreach_async (WkaA11yForeachCb row_cb,
+                                  WkaA11yWalkDoneCb done_cb,
+                                  gpointer user_data)
+{
+	JNIEnv *env;
+	jclass cls;
+	jmethodID mid;
+	WkaWalkPending *pending;
+	guint cookie;
+
+	if (wka_walk_pending == NULL) {
+		wka_walk_pending = g_hash_table_new (g_direct_hash, g_direct_equal);
+	}
+
+	cookie = wka_walk_cookie_seq++;
+	if (cookie == 0) {
+		cookie = wka_walk_cookie_seq++;
+	}
+	pending = g_new0 (WkaWalkPending, 1);
+	pending->row_cb = row_cb;
+	pending->done_cb = done_cb;
+	pending->user_data = user_data;
+	g_hash_table_insert (wka_walk_pending, GUINT_TO_POINTER (cookie), pending);
+
+	env = wka_get_env ();
+	if (env == NULL) {
+		wka_walk_schedule_fail (cookie);
+		return;
+	}
+	cls = wka_a11y_class (env);
+	if (cls == NULL) {
+		wka_walk_schedule_fail (cookie);
+		return;
+	}
+	mid = (*env)->GetStaticMethodID (env, cls, "walkAsync", "(J)V");
+	if (mid == NULL || (*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionClear (env);
+		wka_walk_schedule_fail (cookie);
+		return;
+	}
+	(*env)->CallStaticVoidMethod (env, cls, mid, (jlong) cookie);
+	if ((*env)->ExceptionCheck (env)) {
+		(*env)->ExceptionDescribe (env);
+		(*env)->ExceptionClear (env);
+		wka_walk_schedule_fail (cookie);
+	}
 }
 
 gboolean

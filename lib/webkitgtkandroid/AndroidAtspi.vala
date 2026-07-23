@@ -1,5 +1,8 @@
 /* Android AT-SPI-shaped facade over WebView host a11y (parallel to Win32Atspi).
- * Host a11y C bindings live in WebView.vala (same library compile unit). */
+ * Host a11y C bindings live in WebView.vala (same library compile unit).
+ *
+ * From GLib/GTK: call refresh_async() before get_desktop() — sync ensure_tree /
+ * walk on the GTK thread ANRs with IME blockForMain (docs/a11y.md). */
 
 namespace AndroidAtspi
 {
@@ -276,6 +279,8 @@ namespace AndroidAtspi
 		}
 
 		private static GLib.GenericArray<WalkRow>? walk_accum;
+		private static GLib.SourceFunc? async_resume;
+		private static bool async_ok;
 
 		private static void walk_cb (
 			int id,
@@ -312,6 +317,22 @@ namespace AndroidAtspi
 			walk_accum.add (row);
 		}
 
+		private static void ensure_tree_async_done (bool ok, void* user_data)
+		{
+			async_ok = ok;
+			var tree = walk_accum;
+			walk_accum = null;
+			if (tree == null) {
+				tree = new GLib.GenericArray<WalkRow> ();
+			}
+			Bridge.apply_tree (tree);
+			var resume = (owned) async_resume;
+			async_resume = null;
+			if (resume != null) {
+				resume ();
+			}
+		}
+
 		public static void register (WebKitGtkAndroid.WebView web)
 		{
 			Bridge.host = web;
@@ -323,8 +344,27 @@ namespace AndroidAtspi
 			if (Bridge.host == null || !Bridge.host.ready) {
 				throw new GLib.IOError.FAILED ("AndroidAtspi: no WebView registered (host not ready)");
 			}
+			/* Sync path — Android UI only; from GTK use ensure_tree_async. */
 			wka_host_a11y_ensure ();
 			Bridge.rebuild ();
+		}
+
+		public static async void ensure_tree_async () throws GLib.Error
+		{
+			if (Bridge.host == null || !Bridge.host.ready) {
+				throw new GLib.IOError.FAILED ("AndroidAtspi: no WebView registered (host not ready)");
+			}
+			if (async_resume != null) {
+				throw new GLib.IOError.FAILED ("AndroidAtspi: refresh already in progress");
+			}
+			async_resume = ensure_tree_async.callback;
+			async_ok = false;
+			walk_accum = new GLib.GenericArray<WalkRow> ();
+			wka_host_a11y_walk_foreach_async (walk_cb, ensure_tree_async_done, null);
+			yield;
+			if (!async_ok) {
+				throw new GLib.IOError.FAILED ("AndroidAtspi: async walk failed");
+			}
 		}
 
 		public static void rebuild ()
@@ -336,7 +376,11 @@ namespace AndroidAtspi
 			if (!ok || tree == null) {
 				tree = new GLib.GenericArray<WalkRow> ();
 			}
+			Bridge.apply_tree (tree);
+		}
 
+		private static void apply_tree (GLib.GenericArray<WalkRow> tree)
+		{
 			var pid = (uint) Posix.getpid ();
 
 			var desktop = new Accessible ();
@@ -485,18 +529,33 @@ namespace AndroidAtspi
 		Bridge.desktop = null;
 	}
 
+	/**
+	 * Return the last refreshed AT-SPI-shaped tree.
+	 *
+	 * Prefer {@link refresh_async} first when calling from GLib/GTK. A sync
+	 * rebuild here is Android-UI only and refuses off-UI (empty / shell).
+	 */
 	public Accessible get_desktop (int index)
 	{
-		try {
-			Bridge.ensure_tree ();
-		} catch (GLib.Error e) {
-			if (Bridge.desktop == null) {
+		if (Bridge.desktop == null) {
+			try {
+				Bridge.ensure_tree ();
+			} catch (GLib.Error e) {
 				Bridge.desktop = new Accessible ();
 				Bridge.desktop._name = "Desktop";
 				Bridge.desktop._role_name = "desktop frame";
 			}
 		}
 		return Bridge.desktop;
+	}
+
+	/**
+	 * Refresh the host a11y tree on the Android UI thread (async).
+	 * Call this from GLib/GTK before {@link get_desktop} / dump / fill / press.
+	 */
+	public async void refresh_async () throws GLib.Error
+	{
+		yield Bridge.ensure_tree_async ();
 	}
 
 	/**
