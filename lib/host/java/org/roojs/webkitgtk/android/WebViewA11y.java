@@ -6,6 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -15,6 +16,7 @@ import android.webkit.WebView;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,11 +55,34 @@ public final class WebViewA11y {
 		public String uri = "";
 		public boolean canInvoke;
 		public boolean canSetValue;
+		/** HTML form name= (from ViewStructure HtmlInfo). */
+		public String htmlName = "";
+		/** HTML id= (ViewStructure HtmlInfo or viewIdResourceName). */
+		public String htmlId = "";
+		/** HTML tag (from ViewStructure HtmlInfo). */
+		public String htmlTag = "";
+	}
+
+	private static final class HtmlAttrs {
+		String name = "";
+		String id = "";
+		String tag = "";
+		int left;
+		int top;
+		int width;
+		int height;
 	}
 
 	private static final List<AccessibilityNodeInfo> cache = new ArrayList<>();
 	private static final List<Node> lastWalk = new ArrayList<>();
 	private static boolean forceOnDone;
+	/** Autofill virtual id → HTML attrs from last ViewStructure capture. */
+	private static final SparseArray<HtmlAttrs> htmlByVirtualId = new SparseArray<>();
+	private static final Map<String, HtmlAttrs> htmlById = new HashMap<>();
+	private static final List<HtmlAttrs> htmlAll = new ArrayList<>();
+	/** Temp verify (1.3): auto-load name/id fixture once. */
+	private static final boolean SPIKE_FIXTURE = false;
+	private static boolean spikeFixtureScheduled;
 
 	private WebViewA11y() {
 	}
@@ -142,10 +167,46 @@ public final class WebViewA11y {
 		wv.post(() -> {
 			try {
 				ensure();
+				maybeSpikeFixture(wv);
 			} catch (Throwable t) {
 				Log.w(TAG, "ensureAsync failed", t);
 			}
 		});
+	}
+
+	/** Temp 1.3 verify — remove when SPIKE_FIXTURE is false. */
+	private static void maybeSpikeFixture(WebView wv) {
+		if (!SPIKE_FIXTURE || spikeFixtureScheduled || wv == null) {
+			return;
+		}
+		spikeFixtureScheduled = true;
+		String html = "<!DOCTYPE html><html><head><meta charset=utf-8>"
+			+ "<meta name=viewport content=\"width=device-width, initial-scale=1\">"
+			+ "<title>a11y html name spike</title></head><body>"
+			+ "<h1>Fill-key fixture</h1>"
+			+ "<label>Email <input name=\"email\" id=\"email-id\" type=\"text\"></label>"
+			+ "<label>Search <input name=\"q\" type=\"search\"></label>"
+			+ "<button type=\"submit\">Go</button></body></html>";
+		Log.i(TAG, "spikeFixture: loadDataWithBaseURL");
+		wv.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+		wv.postDelayed(() -> {
+			try {
+				walkOnUiThreadAsync(nodes -> {
+					for (Node n : nodes) {
+						if (n.htmlName.length() > 0 || n.htmlId.length() > 0
+								|| n.htmlTag.length() > 0) {
+							Log.i(TAG, "spikeNode id=" + n.id
+								+ " role=" + n.role
+								+ " htmlName=" + n.htmlName
+								+ " htmlId=" + n.htmlId
+								+ " htmlTag=" + n.htmlTag);
+						}
+					}
+				});
+			} catch (Throwable t) {
+				Log.w(TAG, "spikeFixture walk failed", t);
+			}
+		}, 2500);
 	}
 
 	private static boolean linkDirectConnection(WebView wv) {
@@ -212,17 +273,19 @@ public final class WebViewA11y {
 
 	/**
 	 * Sync walk — Android UI thread only. From GTK/GLib use {@link #walkAsync}.
+	 * HTML attrs use the last AssistStructure capture (may be empty on first sync call).
 	 */
 	public static synchronized Node[] walk() {
 		if (!onUiThread()) {
 			Log.e(TAG, "walk: called off UI thread — refusing sync WebView a11y (deadlock risk)");
 			return new Node[0];
 		}
-		return walkOnUiThread();
+		return walkNodeInfoOnUiThread();
 	}
 
 	/**
 	 * Schedule walk on the WebView looper; delivers via {@link #nativeWalkDone}.
+	 * Waits for Chromium AssistStructure snapshot (HTML name/id/tag) then NodeInfo walk.
 	 * Does not block the caller — safe from the GTK thread.
 	 */
 	public static void walkAsync(final long cookie) {
@@ -232,19 +295,39 @@ public final class WebViewA11y {
 			nativeWalkDone(new Node[0], cookie);
 			return;
 		}
-		wv.post(() -> {
-			Node[] nodes;
-			synchronized (WebViewA11y.class) {
-				nodes = walkOnUiThread();
-			}
+		wv.post(() -> walkOnUiThreadAsync(nodes -> {
 			Log.i(TAG, "walkAsync: " + nodes.length + " nodes cookie=" + cookie);
 			nativeWalkDone(nodes, cookie);
-		});
+		}));
 	}
 
 	private static native void nativeWalkDone(Node[] nodes, long cookie);
 
-	private static Node[] walkOnUiThread() {
+	private interface WalkDone {
+		void onDone(Node[] nodes);
+	}
+
+	/**
+	 * UI thread: AssistStructure snapshot (async) → NodeInfo walk → {@code done}.
+	 */
+	private static void walkOnUiThreadAsync(WalkDone done) {
+		WebView wv = WebViewHost.getWebView();
+		if (wv == null) {
+			done.onDone(new Node[0]);
+			return;
+		}
+		ensure();
+		captureHtmlAttrsAsync(wv, () -> {
+			Node[] nodes;
+			synchronized (WebViewA11y.class) {
+				nodes = walkNodeInfoOnUiThread();
+			}
+			done.onDone(nodes);
+		});
+	}
+
+	/** NodeInfo tree only — uses {@link #htmlAll} from the last capture. */
+	private static Node[] walkNodeInfoOnUiThread() {
 		clearCache();
 		lastWalk.clear();
 		WebView wv = WebViewHost.getWebView();
@@ -266,8 +349,193 @@ public final class WebViewA11y {
 		}
 		collect(root, -1, 0);
 		root.recycle();
-		Log.i(TAG, "walk: " + lastWalk.size() + " nodes");
+		mergeHtmlByEditOrder();
+		Log.i(TAG, "walk: " + lastWalk.size() + " nodes htmlAttrs=" + htmlAll.size());
 		return lastWalk.toArray(new Node[0]);
+	}
+
+	/**
+	 * Pair editable NodeInfo rows with ViewStructure inputs in document order.
+	 * Needed when Autofill virtual ids are absent (common on System WebView).
+	 */
+	private static void mergeHtmlByEditOrder() {
+		List<HtmlAttrs> fields = new ArrayList<>();
+		for (HtmlAttrs ha : htmlAll) {
+			if (ha.name.length() == 0 && ha.id.length() == 0) {
+				continue;
+			}
+			String tag = ha.tag != null ? ha.tag : "";
+			if (tag.length() > 0
+					&& !tag.equals("input")
+					&& !tag.equals("textarea")
+					&& !tag.equals("select")
+					&& !tag.equals("button")) {
+				continue;
+			}
+			fields.add(ha);
+		}
+		List<Node> edits = new ArrayList<>();
+		for (Node n : lastWalk) {
+			if (n.canSetValue) {
+				edits.add(n);
+			}
+		}
+		int n = Math.min(fields.size(), edits.size());
+		for (int i = 0; i < n; i++) {
+			Node node = edits.get(i);
+			HtmlAttrs ha = fields.get(i);
+			if (node.htmlName.length() == 0 && ha.name.length() > 0) {
+				node.htmlName = ha.name;
+			}
+			if (node.htmlTag.length() == 0 && ha.tag.length() > 0) {
+				node.htmlTag = ha.tag;
+			}
+			if (node.htmlId.length() == 0 && ha.id.length() > 0) {
+				node.htmlId = ha.id;
+			}
+		}
+	}
+
+	/**
+	 * Chromium AssistStructure side door (async): HTML tag + attrs via
+	 * {@link WebView#onProvideVirtualStructure}. Invokes {@code whenDone} on the
+	 * UI thread after {@code asyncCommit} or a timeout.
+	 */
+	private static void captureHtmlAttrsAsync(WebView wv, Runnable whenDone) {
+		if (wv == null) {
+			whenDone.run();
+			return;
+		}
+		htmlByVirtualId.clear();
+		htmlById.clear();
+		htmlAll.clear();
+		final boolean[] finished = { false };
+		Runnable finish = () -> {
+			if (finished[0]) {
+				return;
+			}
+			finished[0] = true;
+			whenDone.run();
+		};
+		try {
+			CaptureViewStructure root = new CaptureViewStructure();
+			root.pendingChildCommit = () -> {
+				indexHtmlTree(root);
+				Log.i(TAG, "captureHtmlAttrs: commit htmlAttrs=" + htmlAll.size());
+				finish.run();
+			};
+			wv.onProvideVirtualStructure(root);
+			/* Snapshot is async (renderer); don't hang forever. */
+			wv.postDelayed(() -> {
+				if (!finished[0]) {
+					Log.w(TAG, "captureHtmlAttrs: timeout — indexing partial tree");
+					indexHtmlTree(root);
+					finish.run();
+				}
+			}, 3000);
+		} catch (Throwable t) {
+			Log.w(TAG, "captureHtmlAttrs failed", t);
+			finish.run();
+		}
+	}
+
+	private static void indexHtmlTree(CaptureViewStructure root) {
+		htmlByVirtualId.clear();
+		htmlById.clear();
+		htmlAll.clear();
+		List<CaptureViewStructure> flat = new ArrayList<>();
+		root.flatten(flat);
+		for (CaptureViewStructure vs : flat) {
+			if (vs.htmlInfo == null) {
+				continue;
+			}
+			HtmlAttrs ha = new HtmlAttrs();
+			ha.tag = vs.htmlTag();
+			ha.name = vs.htmlAttr("name");
+			ha.id = vs.htmlAttr("id");
+			if (ha.id.length() == 0 && vs.idEntryName != null && vs.idEntryName.length() > 0) {
+				ha.id = vs.idEntryName;
+			}
+			ha.left = vs.left;
+			ha.top = vs.top;
+			ha.width = vs.width;
+			ha.height = vs.height;
+			htmlAll.add(ha);
+			if (vs.autofillVirtualId >= 0) {
+				htmlByVirtualId.put(vs.autofillVirtualId, ha);
+			}
+			if (ha.id.length() > 0 && !htmlById.containsKey(ha.id)) {
+				htmlById.put(ha.id, ha);
+			}
+			if (ha.name.length() > 0 || ha.id.length() > 0) {
+				Log.d(TAG, "htmlAttr tag=" + ha.tag
+					+ " name=" + ha.name
+					+ " id=" + ha.id
+					+ " virt=" + vs.autofillVirtualId);
+			}
+		}
+	}
+
+	private static void applyHtmlAttrs(AccessibilityNodeInfo el, Node n) {
+		HtmlAttrs ha = null;
+		if (Build.VERSION.SDK_INT >= 33) {
+			String uid = el.getUniqueId();
+			if (uid != null && uid.length() > 0) {
+				try {
+					ha = htmlByVirtualId.get(Integer.parseInt(uid));
+				} catch (NumberFormatException ignored) {
+				}
+			}
+		}
+		if (ha == null) {
+			String viewId = el.getViewIdResourceName();
+			if (viewId != null && viewId.length() > 0) {
+				ha = htmlById.get(viewId);
+			}
+		}
+		if (ha == null && n.canSetValue) {
+			ha = matchHtmlByBounds(n);
+		}
+		if (ha == null) {
+			String viewId = el.getViewIdResourceName();
+			if (viewId != null) {
+				n.htmlId = viewId;
+			}
+			return;
+		}
+		n.htmlName = ha.name != null ? ha.name : "";
+		n.htmlId = ha.id != null ? ha.id : "";
+		n.htmlTag = ha.tag != null ? ha.tag : "";
+		if (n.htmlId.length() == 0) {
+			String viewId = el.getViewIdResourceName();
+			if (viewId != null) {
+				n.htmlId = viewId;
+			}
+		}
+	}
+
+	/** Last-resort match for name-only inputs (no id / virt id miss). */
+	private static HtmlAttrs matchHtmlByBounds(Node n) {
+		HtmlAttrs best = null;
+		int bestDist = Integer.MAX_VALUE;
+		for (HtmlAttrs ha : htmlAll) {
+			if (ha.name.length() == 0 && ha.id.length() == 0) {
+				continue;
+			}
+			if (ha.width <= 0 || ha.height <= 0) {
+				continue;
+			}
+			int cx = ha.left + ha.width / 2;
+			int cy = ha.top + ha.height / 2;
+			int nx = n.x + n.w / 2;
+			int ny = n.y + n.h / 2;
+			int dist = Math.abs(cx - nx) + Math.abs(cy - ny);
+			if (dist < bestDist && dist < 120) {
+				bestDist = dist;
+				best = ha;
+			}
+		}
+		return best;
 	}
 
 	private static void runOnUi(WebView wv, Runnable r) {
@@ -439,6 +707,7 @@ public final class WebViewA11y {
 		n.canSetValue = el.isEditable()
 			|| el.getActionList().contains(
 				AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_TEXT);
+		applyHtmlAttrs(el, n);
 		return n;
 	}
 

@@ -63,7 +63,7 @@ private void a11y_collect (AndroidAtspi.Accessible acc, int parent_id, StringBui
 
 	sb.append_printf (
 		"[%d] parent=%d role=%s name=\"%s\" value=\"%s\" uri=\"%s\" "
-		+ "bounds=%d,%d %dx%d invoke=%s set_value=%s\n",
+		+ "bounds=%d,%d %dx%d invoke=%s set_value=%s",
 		id,
 		parent_id,
 		role,
@@ -77,6 +77,17 @@ private void a11y_collect (AndroidAtspi.Accessible acc, int parent_id, StringBui
 		can_invoke.to_string (),
 		can_set.to_string ()
 	);
+	var attrs = acc.get_attributes ();
+	if (attrs != null) {
+		var an = attrs.get ("name");
+		var aid = attrs.get ("id");
+		var atag = attrs.get ("tag");
+		if ((an != null && an != "") || (aid != null && aid != "") || (atag != null && atag != "")) {
+			sb.append_printf (" attrs(name=%s id=%s tag=%s)",
+				an ?? "", aid ?? "", atag ?? "");
+		}
+	}
+	sb.append_c ('\n');
 
 	var n = acc.get_child_count ();
 	for (var i = 0; i < n; i++) {

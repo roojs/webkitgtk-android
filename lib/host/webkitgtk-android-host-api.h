@@ -71,6 +71,9 @@ typedef struct wka_a11y_node {
 	char *role;
 	char *value;
 	char *uri; /* http(s) when exposed; else empty */
+	char *html_name; /* HTML name= (AssistStructure); may be empty */
+	char *html_id;   /* HTML id= */
+	char *html_tag;  /* HTML tag */
 	gboolean can_invoke;
 	gboolean can_set_value;
 } wka_a11y_node;
@@ -86,6 +89,9 @@ typedef void (*WkaA11yForeachCb) (
 	const char *role,
 	const char *value,
 	const char *uri,
+	const char *html_name,
+	const char *html_id,
+	const char *html_tag,
 	gboolean can_invoke,
 	gboolean can_set_value,
 	gpointer user_data

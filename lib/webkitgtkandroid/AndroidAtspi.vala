@@ -274,6 +274,9 @@ namespace AndroidAtspi
 			public string role = "";
 			public string value = "";
 			public string uri = "";
+			public string html_name = "";
+			public string html_id = "";
+			public string html_tag = "";
 			public bool can_invoke;
 			public bool can_set_value;
 		}
@@ -293,6 +296,9 @@ namespace AndroidAtspi
 			string role,
 			string value,
 			string uri,
+			string html_name,
+			string html_id,
+			string html_tag,
 			bool can_invoke,
 			bool can_set_value,
 			void* user_data
@@ -312,6 +318,9 @@ namespace AndroidAtspi
 			row.role = role;
 			row.value = value;
 			row.uri = uri;
+			row.html_name = html_name;
+			row.html_id = html_id;
+			row.html_tag = html_tag;
 			row.can_invoke = can_invoke;
 			row.can_set_value = can_set_value;
 			walk_accum.add (row);
@@ -488,6 +497,15 @@ namespace AndroidAtspi
 			case "Text":
 				acc.set_attr ("computed-role", "text");
 				break;
+			}
+			if (n.html_name != null && n.html_name != "") {
+				acc.set_attr ("name", n.html_name);
+			}
+			if (n.html_id != null && n.html_id != "") {
+				acc.set_attr ("id", n.html_id);
+			}
+			if (n.html_tag != null && n.html_tag != "") {
+				acc.set_attr ("tag", n.html_tag);
 			}
 			return acc;
 		}

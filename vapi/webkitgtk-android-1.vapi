@@ -141,6 +141,9 @@ public delegate void WkaA11yForeachCb (
 	string role,
 	string value,
 	string uri,
+	string html_name,
+	string html_id,
+	string html_tag,
 	bool can_invoke,
 	bool can_set_value,
 	void* user_data
