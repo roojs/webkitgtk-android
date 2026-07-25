@@ -48,4 +48,4 @@ ninja -C build-docs docs/valadoc
 
 ## Artificial Intelligence Usage
 
-Project was developed with the assistance of artificial intelligence.
+This project was developed with the assistance of artificial intelligence.
