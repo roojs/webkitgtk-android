@@ -45,3 +45,7 @@ ninja -C build-docs docs/valadoc
 - Snapshot / PDF / capture APIs
 - Full WebKitGTK feature surface
 - Linux/Windows builds of this library
+
+## Artificial Intelligence Usage
+
+Project was developed with the assistance of artificial intelligence.
