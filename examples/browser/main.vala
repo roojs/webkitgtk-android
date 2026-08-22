@@ -262,7 +262,7 @@ public class BrowserApplication : Adw.Application
 				sync_url_entry ();
 			}
 		});
-		web.get_network_session ().download_started.connect ((download) => {
+		web.network_session.download_started.connect ((download) => {
 			download.decide_destination.connect ((suggested) => {
 				var name = suggested != null && suggested != "" ? suggested : "download";
 				var dir = GLib.Environment.get_user_special_dir (GLib.UserDirectory.DOWNLOAD);

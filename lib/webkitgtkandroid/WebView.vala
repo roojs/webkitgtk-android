@@ -166,7 +166,6 @@ namespace WebKitGtkAndroid
 		private int last_bound_y = int.MIN;
 		private int last_bound_w = int.MIN;
 		private int last_bound_h = int.MIN;
-		private NetworkSession network_session = new NetworkSession ();
 
 		public bool ready {
 			get {
@@ -193,6 +192,9 @@ namespace WebKitGtkAndroid
 			}
 		}
 
+		/** WebKitGTK-shaped — network session for this view. */
+		public NetworkSession network_session { get; construct; }
+
 		public signal void load_changed (LoadEvent load_event);
 
 		/**
@@ -210,6 +212,12 @@ namespace WebKitGtkAndroid
 		 * WebKitGTK-shaped load-failed (host does not emit yet — connect is safe).
 		 */
 		public signal bool load_failed (LoadEvent load_event, string failing_uri, GLib.Error error);
+
+		construct {
+			if (this.network_session == null) {
+				this.network_session = new NetworkSession ();
+			}
+		}
 
 		public WebView ()
 		{
@@ -495,14 +503,6 @@ namespace WebKitGtkAndroid
 				this.title = wka_host_get_title ();
 			}
 			return this.title;
-		}
-
-		/**
-		 * WebKitGTK-shaped network session (cookies + downloads).
-		 */
-		public NetworkSession get_network_session ()
-		{
-			return this.network_session;
 		}
 
 		/**

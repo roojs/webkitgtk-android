@@ -38,7 +38,7 @@ ninja -C build-docs docs/valadoc
 
 - `/home/alan/git/webview2-gtk` — Windows embed pattern to mirror
 - `/home/alan/gitlive/OLLMchat` `libocwebkit` — browser tool + a11y markdown consumer
-- OLLMchat `docs/plans/5.0.2-android-webkit-control.md` — chat-side Android wire-up
+- OLLMchat `docs/plans/done/5.0.2-DONE-android-webkit-control.md` — chat-side Android wire-up
 
 ## Out of scope
 

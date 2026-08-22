@@ -103,7 +103,7 @@ namespace WebKitGtkAndroid {
 		public double estimated_load_progress { get; }
 		public unowned string get_uri ();
 		public unowned string get_title ();
-		public NetworkSession get_network_session ();
+		public NetworkSession network_session { get; construct; }
 		public Download download_uri (string uri);
 		public void load_uri (string uri);
 		public void go_back ();
