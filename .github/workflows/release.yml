@@ -1,0 +1,87 @@
+name: Release
+
+# Source tarball for Meson wrap-file. Tag push (v*) publishes a GitHub Release.
+# workflow_dispatch builds the tarball without publishing.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Make source tarball
+        id: dist
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            ver="${GITHUB_REF#refs/tags/v}"
+          else
+            ver="$(sed -n "s/^[[:space:]]*version: '\\([^']*\\)'.*/\\1/p" meson.build | head -1)"
+          fi
+          if [[ -z "${ver}" ]]; then
+            echo "could not determine version" >&2
+            exit 1
+          fi
+          tarball="webkitgtk-android-${ver}.tar.gz"
+          mkdir -p dist
+          git archive --prefix="webkitgtk-android-${ver}/" HEAD | gzip -n > "dist/${tarball}"
+          hash="$(sha256sum "dist/${tarball}" | awk '{ print $1 }')"
+          printf '%s  %s\n' "${hash}" "${tarball}" > "dist/${tarball}.sha256"
+          echo "ver=${ver}" >> "$GITHUB_OUTPUT"
+          echo "tarball=${tarball}" >> "$GITHUB_OUTPUT"
+          echo "hash=${hash}" >> "$GITHUB_OUTPUT"
+          echo "Tarball dist/${tarball}"
+          echo "SHA256 ${hash}"
+          ls -lh dist
+
+      - name: Render release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          VER: ${{ steps.dist.outputs.ver }}
+          TARBALL: ${{ steps.dist.outputs.tarball }}
+          HASH: ${{ steps.dist.outputs.hash }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/release/changelog.sh
+          scripts/release/changelog.sh release-notes "${GITHUB_REF#refs/tags/}" -o release-notes.md
+          asset_url="https://github.com/roojs/webkitgtk-android/releases/download/v${VER}/${TARBALL}"
+          {
+            echo
+            echo "## Wrap pin"
+            echo
+            echo '```ini'
+            echo '[wrap-file]'
+            echo "directory = webkitgtk-android-${VER}"
+            echo "source_url = ${asset_url}"
+            echo "source_filename = ${TARBALL}"
+            echo "source_hash = ${HASH}"
+            echo
+            echo '[provide]'
+            echo 'dependency_names = webkitgtk-android-1'
+            echo '```'
+          } >> release-notes.md
+          echo "---- release-notes.md ----"
+          cat release-notes.md
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: webkitgtk-android-dist
+          path: dist/*
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: dist/*
+          overwrite_files: true

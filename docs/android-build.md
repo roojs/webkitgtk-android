@@ -38,6 +38,8 @@ That copies `org.roojs.webkitgtk.android.WebViewHost` (+ a11y / download / freez
 
 **Subproject / wrap (preferred for OLLMchat):** add this tree as a Meson subproject and `dependency('webkitgtk-android-1')` — this project calls `meson.override_dependency`, so the build-tree VAPI is wired automatically without a prefix install.
 
+**Pin a release tarball** (not `HEAD`) — see [`docs/releasing.md`](releasing.md). The GitHub Release notes include a `wrap-file` snippet with `source_url` + `source_hash`. GitHub auto-generated “Source code” archives are not stable hashes; use the attached `webkitgtk-android-*.tar.gz`.
+
 **Prefix install:** `meson install` also stages `webkitgtk-android-1.pc`, `vapi/webkitgtk-android-1.vapi`, and `webkitgtk-android-host-api.h`. Pixiewood APK builds often install **runtime `.so` only**; use a subproject (or a full prefix + `PKG_CONFIG_PATH`) for compiling consumers.
 
 **Valadoc (Linux, no Android):**

@@ -25,6 +25,12 @@ web.load_uri ("https://roojs.com/");
 - **Downloads ✔️** — engine API (see [`docs/plans/1.1-downloads.md`](docs/plans/1.1-downloads.md))
 - **Packaging ✔️** — `libwebkitgtk-android-1` + pkg-config / VAPI (see [`docs/android-build.md`](docs/android-build.md))
 
+| Doc | |
+|-----|--|
+| [Changelog](CHANGELOG.md) | Notable changes per release |
+| [Android build](docs/android-build.md) | Pixiewood APKs + consumer wrap |
+| [Releasing](docs/releasing.md) | Tag + source tarball GitHub Release |
+
 ### Valadoc (Linux)
 
 ```bash
