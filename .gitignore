@@ -9,6 +9,9 @@ build-docs/
 *.apk
 .flatpak-builder/
 
+# Release tarballs (scripts/release.sh)
+dist/
+
 # Meson / editor
 .cache/
 *.swp

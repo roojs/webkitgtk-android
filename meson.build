@@ -1,7 +1,7 @@
 project(
   'webkitgtk-android',
   ['c', 'vala'],
-  version: '0.1.0',
+  version: '0.1.3',
   meson_version: '>= 1.8.0',
   default_options: [
     'warning_level=1',
