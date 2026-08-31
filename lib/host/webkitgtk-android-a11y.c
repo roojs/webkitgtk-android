@@ -175,6 +175,12 @@ wka_fill_node_from_java (JNIEnv *env, jobject jnode, wka_a11y_node *n)
 	n->value = wka_jstring_dup (env, (jstring) (*env)->GetObjectField (env, jnode, f));
 	f = (*env)->GetFieldID (env, nc, "uri", "Ljava/lang/String;");
 	n->uri = wka_jstring_dup (env, (jstring) (*env)->GetObjectField (env, jnode, f));
+	f = (*env)->GetFieldID (env, nc, "htmlName", "Ljava/lang/String;");
+	n->html_name = wka_jstring_dup (env, (jstring) (*env)->GetObjectField (env, jnode, f));
+	f = (*env)->GetFieldID (env, nc, "htmlId", "Ljava/lang/String;");
+	n->html_id = wka_jstring_dup (env, (jstring) (*env)->GetObjectField (env, jnode, f));
+	f = (*env)->GetFieldID (env, nc, "htmlTag", "Ljava/lang/String;");
+	n->html_tag = wka_jstring_dup (env, (jstring) (*env)->GetObjectField (env, jnode, f));
 	f = (*env)->GetFieldID (env, nc, "canInvoke", "Z");
 	n->can_invoke = (*env)->GetBooleanField (env, jnode, f) == JNI_TRUE;
 	f = (*env)->GetFieldID (env, nc, "canSetValue", "Z");
@@ -196,6 +202,9 @@ wka_host_a11y_nodes_free (wka_a11y_node *nodes, gsize count)
 		g_free (nodes[i].role);
 		g_free (nodes[i].value);
 		g_free (nodes[i].uri);
+		g_free (nodes[i].html_name);
+		g_free (nodes[i].html_id);
+		g_free (nodes[i].html_tag);
 	}
 	g_free (nodes);
 }
@@ -279,6 +288,9 @@ wka_host_a11y_walk_foreach (WkaA11yForeachCb cb, gpointer user_data)
 			n->role != NULL ? n->role : "",
 			n->value != NULL ? n->value : "",
 			n->uri != NULL ? n->uri : "",
+			n->html_name != NULL ? n->html_name : "",
+			n->html_id != NULL ? n->html_id : "",
+			n->html_tag != NULL ? n->html_tag : "",
 			n->can_invoke,
 			n->can_set_value,
 			user_data
@@ -318,6 +330,9 @@ wka_walk_idle (gpointer data)
 				n->role != NULL ? n->role : "",
 				n->value != NULL ? n->value : "",
 				n->uri != NULL ? n->uri : "",
+				n->html_name != NULL ? n->html_name : "",
+				n->html_id != NULL ? n->html_id : "",
+				n->html_tag != NULL ? n->html_tag : "",
 				n->can_invoke,
 				n->can_set_value,
 				pending->user_data

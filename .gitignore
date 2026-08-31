@@ -20,6 +20,9 @@ build-docs/
 .automation-build.log
 .cdp-spike-build.log
 
+# Release tarballs (scripts/release.sh / CI)
+dist/
+
 # Meson / editor
 .cache/
 *.swp

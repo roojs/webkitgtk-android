@@ -11,7 +11,7 @@
       <meta:description>
         <meta:p>
           WebContext / AutomationSession / controlled WebView setup smoke for
-          Android CDP parity (plan 1.3 Phase 1).
+          Android CDP parity (plan 1.4 Phase 1).
         </meta:p>
       </meta:description>
       <meta:requires>

@@ -1,4 +1,4 @@
-/* Automation setup smoke — WebKitGTK-shaped APIs on webkitgtk-android (plan 1.3 Phase 1).
+/* Automation setup smoke — WebKitGTK-shaped APIs on webkitgtk-android (plan 1.4 Phase 1).
  *
  * Setup only: no WebDriver, no click/type.
  *

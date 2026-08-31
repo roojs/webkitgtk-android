@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Verify the tree is ready, then tag + push. GitHub Actions publishes the TGZ.
+# Verify the tree is ready, then tag + push. GitHub Actions publishes the tarball.
 #
 # 1. Read latest ## [X.Y.Z] - Unreleased from CHANGELOG.md
-# 2. Exit if tag vX.Y.Z already exists (local or origin)
+# 2. Require meson.build project version == X.Y.Z
+# 3. Exit if tag vX.Y.Z already exists (local or origin)
 #    unless --retry: delete that tag locally and on origin, then continue
-# 3. Verify: clean tree, non-empty notes, meson version matches
-# 4. git tag -a + git push (branch + tag) → GitHub Actions publishes release
+# 4. Verify: clean tree, non-empty notes
+# 5. git tag -a + git push (branch + tag) → GitHub Actions publishes the release
 #
 # AGENTS ARE BANNED from running this script. The human runs it in a normal terminal.
 set -euo pipefail
@@ -33,8 +34,7 @@ Usage: scripts/release.sh [--retry]
 Create an annotated tag from CHANGELOG.md and push it to origin.
 
   --retry   Delete the existing version tag locally and on origin, then
-            retag HEAD and push (use after a failed release CI run, or to
-            replace an informal early tag).
+            retag HEAD and push (use after a failed release CI run).
 EOF
 			exit 0
 			;;
@@ -58,27 +58,26 @@ chmod +x scripts/release/changelog.sh
 ver="$(scripts/release/changelog.sh version)"
 tag="v${ver}"
 notes="$(scripts/release/changelog.sh notes)"
+meson_ver="$(sed -n "s/^[[:space:]]*version: '\\([^']*\\)'.*/\\1/p" meson.build | head -1)"
 
 echo "CHANGELOG.md latest: ${ver}"
+echo "meson.build version: ${meson_ver}"
 echo "Tag: ${tag}"
 echo "---- notes ----"
 echo "${notes}"
 echo "---------------"
 
-if [[ -z "${notes//[[:space:]]/}" ]]; then
-	echo "error: empty notes for ${ver} — fill CHANGELOG.md first" >&2
-	exit 1
-fi
-
-meson_ver="$(
-	sed -n "s/^[[:space:]]*version:[[:space:]]*'\\([^']*\\)'.*/\\1/p" meson.build | head -1
-)"
 if [[ -z "${meson_ver}" ]]; then
 	echo "error: could not read project version from meson.build" >&2
 	exit 1
 fi
 if [[ "${meson_ver}" != "${ver}" ]]; then
-	echo "error: meson.build version '${meson_ver}' != CHANGELOG '${ver}'" >&2
+	echo "error: meson.build version ${meson_ver} != CHANGELOG ${ver}" >&2
+	exit 1
+fi
+
+if [[ -z "${notes//[[:space:]]/}" ]]; then
+	echo "error: empty notes for ${ver} — fill CHANGELOG.md first" >&2
 	exit 1
 fi
 
@@ -121,4 +120,5 @@ echo "Pushing ${branch} and ${tag} to origin..."
 git push -u origin "${branch}"
 git push origin "${tag}"
 
-echo "Released ${tag}. GitHub Actions will publish webkitgtk-android-${ver}.tar.gz and the GitHub release."
+echo "Released ${tag}. GitHub Actions will attach webkitgtk-android-${ver}.tar.gz and publish the GitHub Release."
+echo "After that lands, date the changelog section (${ver}) and add ## [next] - Unreleased (bump meson.build)."

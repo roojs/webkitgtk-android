@@ -24,8 +24,14 @@ web.load_uri ("https://roojs.com/");
 - **Phase 3 ✔️** — a11y dump / fill / press (await device **✅**). Caller threads: [`docs/a11y.md`](docs/a11y.md) (async from GLib/GTK).
 - **Downloads ✔️** — engine API (see [`docs/plans/1.1-downloads.md`](docs/plans/1.1-downloads.md))
 - **Packaging ✔️** — `libwebkitgtk-android-1` + pkg-config / VAPI (see [`docs/android-build.md`](docs/android-build.md))
-- **Automation ✔️** — WebKitGTK-shaped setup API + CDP bridge ([plan 1.3](docs/plans/1.3-android-automation-parity.md)); fill/press stays in the consumer
+- **Automation ✔️** — WebKitGTK-shaped setup API + CDP bridge ([plan 1.4](docs/plans/1.4-android-automation-parity.md)); fill/press stays in the consumer
 - **Releases** — tag-driven source `.tar.gz` via GitHub Actions ([`docs/releasing.md`](docs/releasing.md), [`CHANGELOG.md`](CHANGELOG.md))
+
+| Doc | |
+|-----|--|
+| [Changelog](CHANGELOG.md) | Notable changes per release |
+| [Android build](docs/android-build.md) | Pixiewood APKs + consumer wrap |
+| [Releasing](docs/releasing.md) | Tag + source tarball GitHub Release |
 
 ### Valadoc (Linux)
 
@@ -40,10 +46,14 @@ ninja -C build-docs docs/valadoc
 
 - `/home/alan/git/webview2-gtk` — Windows embed pattern to mirror
 - `/home/alan/gitlive/OLLMchat` `libocwebkit` — browser tool + a11y markdown consumer
-- OLLMchat `docs/plans/5.0.2-android-webkit-control.md` — chat-side Android wire-up
+- OLLMchat `docs/plans/done/5.0.2-DONE-android-webkit-control.md` — chat-side Android wire-up
 
 ## Out of scope
 
 - Snapshot / PDF / capture APIs
 - Full WebKitGTK feature surface
 - Linux/Windows builds of this library
+
+## Artificial Intelligence Usage
+
+This project was developed with the assistance of artificial intelligence.
