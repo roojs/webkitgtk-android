@@ -257,6 +257,8 @@ verify_apk() {
 
   if [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-browser.xml ]]; then
     so_name="libwebkitgtk-android-browser.so"
+  elif [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-automation.xml ]]; then
+    so_name="libwebkitgtk-android-automation.so"
   fi
 
   if [ ! -f "$apk" ]; then
@@ -270,7 +272,8 @@ verify_apk() {
     exit 1
   fi
   echo "Verified $apk contains $so_name"
-  if [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-browser.xml ]]; then
+  if [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-browser.xml ]] \
+    || [[ "$PIXIEWOOD_MANIFEST" == *pixiewood-automation.xml ]]; then
     if ! grep -q 'lib/arm64-v8a/libwebkitgtk-android-1.so' <<<"$listing" \
       && ! grep -q 'lib/arm64-v8a/libwebkitgtk-android-1.so.' <<<"$listing"; then
       echo "APK missing libwebkitgtk-android-1.so (shared library packaging)" >&2

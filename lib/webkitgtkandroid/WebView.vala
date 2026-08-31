@@ -163,7 +163,16 @@ namespace WebKitGtkAndroid
 		private int last_bound_y = int.MIN;
 		private int last_bound_w = int.MIN;
 		private int last_bound_h = int.MIN;
-		private NetworkSession network_session = new NetworkSession ();
+		private WebViewSettings capture_settings = new WebViewSettings ();
+
+		/** WebKitGTK-shaped — context for this view. */
+		public WebContext web_context { owned get; construct; }
+
+		/** WebKitGTK-shaped — network session for this view. */
+		public NetworkSession network_session { get; construct; }
+
+		/** WebKitGTK-shaped — this view is owned by an automation session. */
+		public bool is_controlled_by_automation { get; construct; }
 
 		public bool ready {
 			get {
@@ -211,6 +220,25 @@ namespace WebKitGtkAndroid
 		public WebView ()
 		{
 			Object (orientation: Gtk.Orientation.VERTICAL, spacing: 0);
+		}
+
+		construct
+		{
+			if (this.web_context == null) {
+				this.web_context = WebContext.get_default ();
+			}
+			if (this.network_session == null) {
+				this.network_session = new NetworkSession ();
+			}
+			if (this.is_controlled_by_automation) {
+				this.web_context.register_controlled_webview (this);
+			}
+
+			/*
+			 * Host overlay must be built here — not only in WebView().
+			 * Subclasses that chain with Object(web_context:…, is_controlled_by_automation:…)
+			 * never run WebView(); without this, attach has no host.
+			 */
 			this.overlay = new Gtk.Overlay ();
 			this.overlay.set_hexpand (true);
 			this.overlay.set_vexpand (true);
@@ -495,11 +523,11 @@ namespace WebKitGtkAndroid
 		}
 
 		/**
-		 * WebKitGTK-shaped network session (cookies + downloads).
+		 * WebKitGTK-shaped settings (stub on Android).
 		 */
-		public NetworkSession get_network_session ()
+		public new WebViewSettings get_settings ()
 		{
-			return this.network_session;
+			return this.capture_settings;
 		}
 
 		/**

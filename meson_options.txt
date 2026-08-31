@@ -13,6 +13,27 @@ option(
 )
 
 option(
+  'android_cdp_spike',
+  type: 'boolean',
+  value: false,
+  description: 'Run Phase 0 CDP spike on launch (Android has no argv; use instead of --cdp-spike)',
+)
+
+option(
+  'android_automation',
+  type: 'boolean',
+  value: false,
+  description: 'Build Phase 1 automation setup example (Pixiewood)',
+)
+
+option(
+  'android_automation_smoke',
+  type: 'boolean',
+  value: false,
+  description: 'Auto-run automation --smoke on launch (Android has no argv)',
+)
+
+option(
   'docs',
   type: 'boolean',
   value: false,

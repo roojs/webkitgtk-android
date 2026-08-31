@@ -109,6 +109,12 @@ gboolean wka_host_a11y_invoke (int id);
 gboolean wka_host_a11y_set_value (int id, const char *utf8);
 gboolean wka_host_a11y_focus (int id);
 
+/* ---- CDP (WEBKIT_INSPECTOR_SERVER → loopback TCP → devtools abstract socket) ---- */
+void wka_host_set_automation_allowed (gboolean allowed);
+gboolean wka_host_get_automation_allowed (void);
+int wka_host_cdp_inspector_port_from_env (void);
+gboolean wka_host_cdp_start (int preferred_port);
+
 /* ---- Cookies (android.webkit.CookieManager; WebKitGTK-shaped Vala) ----
  * get: Cookie header "name=value; name2=value2" (caller g_free).
  * add: name/value/domain/path + flags → setCookie + flush.

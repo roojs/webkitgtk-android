@@ -28,6 +28,9 @@ endif
 if get_option('android_hello') and get_option('android_browser')
   error('Pass only one of -Dandroid_hello=true or -Dandroid_browser=true')
 endif
+if get_option('android_automation') and (get_option('android_hello') or get_option('android_browser'))
+  error('Pass only one of -Dandroid_hello / -Dandroid_browser / -Dandroid_automation')
+endif
 
 gtk_dep = dependency('gtk4')
 adw_dep = dependency('libadwaita-1')
@@ -61,12 +64,19 @@ lib_vala_args = [
 ]
 
 # Pure hello APK has no libsoup in Pixiewood — skip the WebView library there.
-build_library = not get_option('android_hello') or get_option('android_browser')
-
+build_library = (
+  get_option('android_browser')
+  or get_option('android_automation')
+  or not get_option('android_hello')
+)
 if build_library
   host_inc = include_directories('lib/host')
   lib_sources = files(
     'lib/webkitgtkandroid/namespace.vala',
+    'lib/webkitgtkandroid/ApplicationInfo.vala',
+    'lib/webkitgtkandroid/AutomationSession.vala',
+    'lib/webkitgtkandroid/WebContext.vala',
+    'lib/webkitgtkandroid/WebViewSettings.vala',
     'lib/webkitgtkandroid/CookieManager.vala',
     'lib/webkitgtkandroid/URIRequest.vala',
     'lib/webkitgtkandroid/Download.vala',
@@ -76,6 +86,7 @@ if build_library
     'lib/host/webkitgtk-android-host.c',
     'lib/host/webkitgtk-android-bounds.c',
     'lib/host/webkitgtk-android-a11y.c',
+    'lib/host/webkitgtk-android-cdp.c',
     'lib/host/webkitgtk-android-cookies.c',
     'lib/host/webkitgtk-android-downloads.c',
   )
@@ -131,9 +142,25 @@ if get_option('android_browser')
     'webkitgtk-android-browser',
     files(
       'examples/browser/main.vala',
+      'examples/browser/cdp_spike.vala',
     ),
     dependencies: [webkitgtk_android_dep, adw_dep],
-    vala_args: lib_vala_args + ['--pkg=libadwaita-1'],
+    vala_args: lib_vala_args + ['--pkg=libadwaita-1'] + (
+      get_option('android_cdp_spike') ? ['--define=ANDROID_CDP_SPIKE'] : []
+    ),
+    c_args: ['-DANDROID'],
+    android_exe_type: 'application',
+    install: true,
+    install_dir: get_option('libdir'),
+  )
+elif get_option('android_automation')
+  executable(
+    'webkitgtk-android-automation',
+    files('examples/automation/main.vala'),
+    dependencies: [webkitgtk_android_dep, adw_dep],
+    vala_args: lib_vala_args + ['--pkg=libadwaita-1'] + (
+      get_option('android_automation_smoke') ? ['--define=ANDROID_AUTOMATION_SMOKE'] : []
+    ),
     c_args: ['-DANDROID'],
     android_exe_type: 'application',
     install: true,

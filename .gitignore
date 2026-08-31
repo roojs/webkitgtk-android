@@ -9,6 +9,17 @@ build-docs/
 *.apk
 .flatpak-builder/
 
+# Local Pixiewood / GNOME Builder config (machine-absolute paths)
+.buildconfig
+
+# Local Perl deps for Pixiewood host tools (not part of the product)
+.perl5/
+
+# Build / smoke logs dumped in the tree
+*.log
+.automation-build.log
+.cdp-spike-build.log
+
 # Meson / editor
 .cache/
 *.swp

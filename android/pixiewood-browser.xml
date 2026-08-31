@@ -42,7 +42,7 @@
     </glib>
     <fontconfig/>
     <gtk/>
-    <libadwaita/>
+    <libadwaita revision="1.9.3"/>
     <nghttp2/>
     <sqlite3/>
     <libsoup/>

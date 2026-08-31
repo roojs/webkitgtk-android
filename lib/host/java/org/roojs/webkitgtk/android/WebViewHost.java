@@ -323,6 +323,9 @@ public final class WebViewHost {
 		if (url == null || url.length() == 0) {
 			return url;
 		}
+		if (url.startsWith("data:")) {
+			return url;
+		}
 		Uri uri = Uri.parse(url);
 		if ("http".equalsIgnoreCase(uri.getScheme())) {
 			String https = uri.buildUpon().scheme("https").build().toString();
@@ -343,6 +346,11 @@ public final class WebViewHost {
 
 		activity = act;
 		useDisplaySizeLocked(act);
+
+		int cdpPort = WebViewCdpBridge.inspectorPortFromEnv();
+		if (cdpPort > 0 || WebViewCdpBridge.isAutomationAllowed()) {
+			WebViewCdpBridge.enableDebugging();
+		}
 
 		webView = new WebView(act);
 		WebSettings settings = webView.getSettings();
@@ -458,6 +466,11 @@ public final class WebViewHost {
 			+ " " + lp.width + "x" + lp.height + " url=" + url);
 
 		WebViewPaintProbe.install(webView);
+
+		if (cdpPort > 0) {
+			int bound = WebViewCdpBridge.startLoopbackProxy(cdpPort);
+			Log.i(TAG, "CDP bridge env port=" + cdpPort + " bound=" + bound);
+		}
 
 		if (url != null && url.length() > 0) {
 			webView.loadUrl(forceHttps(url));

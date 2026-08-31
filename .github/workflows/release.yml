@@ -1,0 +1,58 @@
+name: Release
+
+# On tag vX.Y.Z: source tarball + GitHub Release notes from CHANGELOG.md.
+# No APK/pacman build — consumers cross-compile via Meson / Pixiewood.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build source tarball
+        id: tarball
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="$(sed -n "s/^[[:space:]]*version:[[:space:]]*'\\([^']*\\)'.*/\\1/p" meson.build | head -1)"
+          fi
+          NAME="webkitgtk-android-${VER}"
+          OUT="${NAME}.tar.gz"
+          git archive --format=tar.gz --prefix="${NAME}/" -o "${OUT}" HEAD
+          ls -lh "${OUT}"
+          echo "ver=${VER}" >> "$GITHUB_OUTPUT"
+          echo "file=${OUT}" >> "$GITHUB_OUTPUT"
+
+      - name: Render release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          chmod +x scripts/release/changelog.sh
+          scripts/release/changelog.sh release-notes "${GITHUB_REF#refs/tags/}" -o release-notes.md
+          echo "---- release-notes.md ----"
+          cat release-notes.md
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: webkitgtk-android-source
+          path: ${{ steps.tarball.outputs.file }}
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: ${{ steps.tarball.outputs.file }}
+          overwrite_files: true

@@ -3,15 +3,15 @@
      xmlns:meta="https://specifications.freedesktop.org/metainfo/1.0">
   <metainfo vercalc="sem121010">
     <meta:component type="desktop-application">
-      <meta:id>org.roojs.webkitgtk.androidhello</meta:id>
-      <meta:name>webkitgtk-android Hello</meta:name>
-      <meta:summary>Phase 1 GTK Android shell (no WebView)</meta:summary>
+      <meta:id>org.roojs.webkitgtk.androidautomation</meta:id>
+      <meta:name>webkitgtk-android Automation</meta:name>
+      <meta:summary>Phase 1 WebKitGTK-shaped automation setup smoke</meta:summary>
       <meta:metadata_license>CC0-1.0</meta:metadata_license>
       <meta:project_license>LGPL-3.0-or-later</meta:project_license>
       <meta:description>
         <meta:p>
-          Minimal GTK 4 + Libadwaita APK used to validate the Android packaging
-          path for webkitgtk-android before embedding System WebView.
+          WebContext / AutomationSession / controlled WebView setup smoke for
+          Android CDP parity (plan 1.3 Phase 1).
         </meta:p>
       </meta:description>
       <meta:requires>
@@ -22,7 +22,7 @@
         <meta:color type="primary" scheme_preference="dark">#1c71d8</meta:color>
       </meta:branding>
       <meta:releases>
-        <meta:release version="0.1.0" date="2026-07-21"/>
+        <meta:release version="0.1.0" date="2026-08-31"/>
       </meta:releases>
     </meta:component>
   </metainfo>
@@ -43,11 +43,16 @@
     <fontconfig/>
     <gtk/>
     <libadwaita revision="1.9.3"/>
+    <nghttp2/>
+    <sqlite3/>
+    <libsoup/>
   </dependencies>
-  <build target="webkitgtk-android-hello">
+  <build target="webkitgtk-android-automation">
     <configure-options>
-      <option>-Dandroid_hello=true</option>
+      <option>-Dandroid_automation=true</option>
+      <option>-Dandroid_automation_smoke=true</option>
       <option>-Dandroid_browser=false</option>
+      <option>-Dandroid_hello=false</option>
     </configure-options>
     <architectures>
       <arch>aarch64</arch>

@@ -87,10 +87,47 @@ namespace WebKitGtkAndroid {
 	}
 
 	[CCode (cheader_filename = "webkitgtk-android.h")]
+	public class ApplicationInfo : GLib.Object {
+		public ApplicationInfo ();
+		public void set_name (string name);
+		public unowned string get_name ();
+		public void set_version (uint64 major, uint64 minor, uint64 micro);
+		public void get_version (out uint64 major, out uint64 minor, out uint64 micro);
+	}
+
+	[CCode (cheader_filename = "webkitgtk-android.h")]
+	public class AutomationSession : GLib.Object {
+		public string id { get; }
+		public signal Gtk.Widget create_web_view ();
+		public void set_application_info (ApplicationInfo info);
+		public unowned ApplicationInfo get_application_info ();
+	}
+
+	[CCode (cheader_filename = "webkitgtk-android.h")]
+	public class WebContext : GLib.Object {
+		public WebContext ();
+		public static unowned WebContext get_default ();
+		public signal void automation_started (AutomationSession session);
+		public void set_automation_allowed (bool allowed);
+		public bool is_automation_allowed ();
+		public NetworkSession? get_network_session_for_automation ();
+	}
+
+	[CCode (cheader_filename = "webkitgtk-android.h")]
+	public class WebViewSettings : GLib.Object {
+		public bool enable_javascript { get; set; }
+		public bool enable_developer_extras { get; set; }
+		public WebViewSettings ();
+	}
+
+	[CCode (cheader_filename = "webkitgtk-android.h")]
 	public class WebView : Gtk.Box {
 		public bool freeze_active;
 		public bool freeze_manual;
 		public Gtk.Picture freeze_picture;
+		public WebContext web_context { owned get; construct; }
+		public NetworkSession network_session { get; construct; }
+		public bool is_controlled_by_automation { get; construct; }
 		public WebView ();
 		public signal void load_changed (LoadEvent load_event);
 		public signal void main_document_response (
@@ -103,7 +140,7 @@ namespace WebKitGtkAndroid {
 		public double estimated_load_progress { get; }
 		public unowned string get_uri ();
 		public unowned string get_title ();
-		public NetworkSession get_network_session ();
+		public WebViewSettings get_settings ();
 		public Download download_uri (string uri);
 		public void load_uri (string uri);
 		public void go_back ();

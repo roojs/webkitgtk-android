@@ -15,6 +15,10 @@ using AndroidAtspi;
 private WebView web;
 private Gtk.Entry url_entry;
 private Gtk.Stack view_stack;
+private bool cdp_spike_mode = false;
+private uint16 cdp_spike_port = 0;
+private bool cdp_spike_ran = false;
+private int cdp_spike_exit = 1;
 
 private void sync_url_entry ()
 {
@@ -198,12 +202,15 @@ private async void dump_a11y_hidden_continue (Gtk.Window? parent)
 
 public class BrowserApplication : Adw.Application
 {
-	public BrowserApplication ()
+	private bool cdp_spike;
+
+	public BrowserApplication (bool cdp_spike = false)
 	{
 		Object (
 			application_id: "org.roojs.webkitgtk.androidbrowser",
 			flags: GLib.ApplicationFlags.DEFAULT_FLAGS
 		);
+		this.cdp_spike = cdp_spike;
 		this.activate.connect (() => {
 			this.open_window ();
 		});
@@ -211,9 +218,9 @@ public class BrowserApplication : Adw.Application
 
 	private void open_window ()
 	{
-		var start = "https://roojs.com/index.php";
+		var start = this.cdp_spike ? cdp_spike_page_uri () : "https://roojs.com/index.php";
 		var window = new Adw.ApplicationWindow (this) {
-			title = "webkitgtk-android browser"
+			title = this.cdp_spike ? "CDP spike" : "webkitgtk-android browser"
 		};
 		window.set_default_size (420, 720);
 
@@ -249,6 +256,10 @@ public class BrowserApplication : Adw.Application
 		web.load_changed.connect ((ev) => {
 			if (ev == LoadEvent.COMMITTED || ev == LoadEvent.FINISHED) {
 				sync_url_entry ();
+			}
+			if (this.cdp_spike && ev == LoadEvent.FINISHED && !cdp_spike_ran) {
+				cdp_spike_ran = true;
+				run_cdp_spike_on_load.begin (window);
 			}
 		});
 		web.get_network_session ().download_started.connect ((download) => {
@@ -341,10 +352,61 @@ public class BrowserApplication : Adw.Application
 		window.set_content (root);
 		window.present ();
 	}
+
+	private async void run_cdp_spike_on_load (Adw.ApplicationWindow window)
+	{
+		/* Let layout + devtools socket settle. */
+		yield cdp_spike_delay_after_load ();
+		try {
+			yield run_cdp_spike_async (cdp_spike_port, web);
+			print ("CDP_SPIKE_PASS\n");
+			cdp_spike_exit = 0;
+		} catch (GLib.Error e) {
+			print ("CDP_SPIKE_FAIL: %s\n", e.message);
+			cdp_spike_exit = 1;
+		}
+		this.release ();
+		this.quit ();
+	}
+
+	private async void cdp_spike_delay_after_load ()
+	{
+		Timeout.add (1500, () => {
+			cdp_spike_delay_after_load.callback ();
+			return false;
+		});
+		yield;
+	}
 }
 
 int main (string[] args)
 {
-	var app = new BrowserApplication ();
-	return app.run (args);
+#if ANDROID_CDP_SPIKE
+	cdp_spike_mode = true;
+#else
+	cdp_spike_mode = "--cdp-spike" in args;
+#endif
+	var gtk_args = new string[] { args[0] };
+	foreach (var arg in args[1:]) {
+		if (arg != "--cdp-spike") {
+			gtk_args += arg;
+		}
+	}
+	if (cdp_spike_mode) {
+		try {
+			cdp_spike_port = cdp_spike_prepare_port ();
+		} catch (GLib.Error e) {
+			print ("CDP_SPIKE_FAIL: prepare %s\n", e.message);
+			return 1;
+		}
+	}
+	var app = new BrowserApplication (cdp_spike_mode);
+	var status = app.run (gtk_args);
+	if (status != 0) {
+		return status;
+	}
+	if (cdp_spike_mode) {
+		return cdp_spike_exit;
+	}
+	return 0;
 }
