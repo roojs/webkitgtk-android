@@ -33,6 +33,12 @@ web.load_uri ("https://roojs.com/");
 | [Android build](docs/android-build.md) | Pixiewood APKs + consumer wrap |
 | [Releasing](docs/releasing.md) | Tag + source tarball GitHub Release |
 
+| Doc | |
+|-----|--|
+| [Changelog](CHANGELOG.md) | Notable changes per release |
+| [Android build](docs/android-build.md) | Pixiewood APKs + consumer wrap |
+| [Releasing](docs/releasing.md) | Tag + source tarball GitHub Release |
+
 ### Valadoc (Linux)
 
 ```bash
