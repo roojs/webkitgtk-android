@@ -28,6 +28,13 @@ namespace WebKitGtkAndroid {
 	}
 
 	[CCode (cheader_filename = "webkitgtk-android.h")]
+	public enum NavigatorWebDriverActivePolicy {
+		AUTO,
+		ENABLED,
+		DISABLED
+	}
+
+	[CCode (cheader_filename = "webkitgtk-android.h")]
 	public errordomain NetworkError {
 		FAILED,
 		TRANSPORT,
@@ -117,6 +124,7 @@ namespace WebKitGtkAndroid {
 	public class WebViewSettings : GLib.Object {
 		public bool enable_javascript { get; set; }
 		public bool enable_developer_extras { get; set; }
+		public NavigatorWebDriverActivePolicy navigator_webdriver_active_policy { get; set; }
 		public WebViewSettings ();
 	}
 

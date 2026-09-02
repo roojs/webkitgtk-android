@@ -123,6 +123,8 @@ extern void wka_host_set_freeze_frame_handler (WkaFreezeFrameCb? cb);
 extern bool wka_host_freeze ();
 [CCode (cheader_filename = "webkitgtk-android-host-api.h")]
 extern bool wka_host_resume ();
+[CCode (cheader_filename = "webkitgtk-android-host-api.h")]
+extern void wka_host_set_navigator_webdriver_active_policy (int policy);
 
 namespace WebKitGtkAndroid
 {
@@ -236,6 +238,8 @@ namespace WebKitGtkAndroid
 			if (this.is_controlled_by_automation) {
 				this.web_context.register_controlled_webview (this);
 			}
+			this.push_navigator_webdriver_policy (false);
+			this.capture_settings.notify.connect (this.on_settings_notify);
 
 			/*
 			 * Host overlay must be built here — not only in WebView().
@@ -531,6 +535,26 @@ namespace WebKitGtkAndroid
 		public new WebViewSettings get_settings ()
 		{
 			return this.capture_settings;
+		}
+
+		private void on_settings_notify (ParamSpec pspec)
+		{
+			switch (pspec.name) {
+			case "navigator-webdriver-active-policy":
+				this.push_navigator_webdriver_policy (true);
+				break;
+			}
+		}
+
+		private void push_navigator_webdriver_policy (bool from_notify)
+		{
+			var policy = this.capture_settings.navigator_webdriver_active_policy;
+			if (from_notify && this.attached && wka_host_is_ready ()) {
+				warning (
+					"WebKitGtkAndroid: navigator_webdriver_active_policy after WebView attach — stored only; System WebView has no AutomationControlled blink switch"
+				);
+			}
+			wka_host_set_navigator_webdriver_active_policy ((int) policy);
 		}
 
 		/**

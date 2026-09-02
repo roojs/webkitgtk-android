@@ -32,6 +32,17 @@ namespace WebKitGtkAndroid
 		SQLITE
 	}
 
+	/**
+	 * WebKit-shaped — {@link WebViewSettings.navigator_webdriver_active_policy}.
+	 * Matches WebCore NavigatorWebDriverActivePolicy / webview2-gtk / webkitgtk-automation.
+	 */
+	public enum NavigatorWebDriverActivePolicy
+	{
+		AUTO,
+		ENABLED,
+		DISABLED
+	}
+
 	/** WebKitGTK-shaped subset — used by cookie / network / download failures. */
 	public errordomain NetworkError
 	{

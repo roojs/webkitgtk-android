@@ -121,6 +121,10 @@ gboolean wka_host_get_automation_allowed (void);
 int wka_host_cdp_inspector_port_from_env (void);
 gboolean wka_host_cdp_start (int preferred_port);
 
+/* 0=AUTO, 1=ENABLED, 2=DISABLED — match NavigatorWebDriverActivePolicy.
+ * Stored only: System WebView has no --disable-blink-features=AutomationControlled. */
+void wka_host_set_navigator_webdriver_active_policy (int policy);
+
 /* ---- Cookies (android.webkit.CookieManager; WebKitGTK-shaped Vala) ----
  * get: Cookie header "name=value; name2=value2" (caller g_free).
  * add: name/value/domain/path + flags → setCookie + flush.
