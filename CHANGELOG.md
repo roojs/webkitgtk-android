@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.1.4] - Unreleased
+## [0.1.5] - Unreleased
+
+### Added
+
+- `NavigatorWebDriverActivePolicy` on `WebViewSettings`
+  (`navigator_webdriver_active_policy`) — WebKit / webview2-gtk shaped API
+  parity; host stores policy (DISABLED is a no-op — System WebView has no
+  AutomationControlled blink switch; page JS already sees `false` under CDP)
+  ([bug](docs/bugs/2026-09-02-navigator-webdriver-active-policy.md)).
+
+## [0.1.4] - 2026-08-31
 
 ### Added
 
@@ -17,11 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CDP host bridge: `WEBKIT_INSPECTOR_SERVER` → loopback TCP →
   `@webview_devtools_remote_<pid>` (`WebViewCdpBridge`).
 - `examples/automation/` setup smoke + Android build/smoke scripts.
-- `NavigatorWebDriverActivePolicy` on `WebViewSettings`
-  (`navigator_webdriver_active_policy`) — WebKit / webview2-gtk shaped API
-  parity; host stores policy (DISABLED is a no-op — System WebView has no
-  AutomationControlled blink switch; page JS already sees `false` under CDP)
-  ([bug](docs/bugs/2026-09-02-navigator-webdriver-active-policy.md)).
 
 ## [0.1.3] - 2026-08-22
 
