@@ -137,7 +137,7 @@ jobs:
             echo "${pixie_url}"
             echo "\`\`\`"
             echo
-            echo "The pin list is [\`release.pins\`](https://github.com/${GITHUB_REPOSITORY}/blob/main/release.pins) on \`main\` and [GitHub Pages](https://roojs.github.io/webkitgtk-android/release.pins)."
+            echo "The pin list is the \`release.pins\` asset on this release and [GitHub Pages](https://roojs.github.io/webkitgtk-android/release.pins)."
           } >> release-notes.md
 
       - name: Publish release assets
@@ -150,16 +150,3 @@ jobs:
             artifacts/*.pixie
             artifacts/release.pins
           overwrite_files: true
-
-      - name: Commit release.pins on main
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout -B main origin/main
-          cp artifacts/release.pins release.pins
-          git add release.pins
-          git diff --staged --quiet && exit 0
-          git commit -m "Publish the Android pixie pin for ${GITHUB_REF_NAME}"
-          git push origin HEAD:main

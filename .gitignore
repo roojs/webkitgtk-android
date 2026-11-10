@@ -20,9 +20,11 @@ build-docs/
 .automation-build.log
 .cdp-spike-build.log
 
-# Release tarballs (scripts/release.sh / CI) and packed .pixie files
+# Release tarballs (scripts/release.sh / CI) and packed .pixie files.
+# release.pins is a release asset, not a file in git.
 dist/
 pixie-artifacts/
+/release.pins
 
 # Meson / editor
 .cache/

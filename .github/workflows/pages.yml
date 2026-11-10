@@ -1,15 +1,12 @@
 name: Pin page
 
-# The github-pages environment allows deployments from main. A version tag
-# commits release.pins here, and this workflow publishes that file.
+# Publish release.pins from the GitHub Release. The file is not stored in git.
+# This workflow runs on main, which is the branch the github-pages environment allows.
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - release.pins
-      - .github/workflows/pages.yml
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -24,16 +21,22 @@ concurrency:
 jobs:
   stage-pins:
     name: Stage pin page
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Stage the pin page
+      - name: Download release.pins from the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test -f release.pins
           mkdir -p site
-          cp release.pins site/release.pins
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            tag="${{ github.event.workflow_run.head_branch }}"
+            gh release download "$tag" --repo "${{ github.repository }}" --pattern release.pins --dir site
+          else
+            gh release download --repo "${{ github.repository }}" --pattern release.pins --dir site
+          fi
+          test -f site/release.pins
           cat > site/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">

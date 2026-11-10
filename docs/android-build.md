@@ -58,7 +58,7 @@ The archive contains `libwebkitgtk-android-1.so`, `webkitgtk-android-1.pc`, the 
 
 That fetches the published GTK stack (GTK itself is the IME package in `android/pixie-gtk.pins`), compiles this library, and writes `pixie-artifacts/`. Host tools required: `valac`, `ninja`, `pkg-config`, `jq`, and the Vala bindings from `libgtk-4-dev`, `libsoup-3.0-dev`, and `libglib2.0-dev`.
 
-After a tag, the pin list is `release.pins` on `main` and at `https://roojs.github.io/webkitgtk-android/release.pins`. The `repo` field is the GTK checkout URL, so the row survives a pin list merged with [pixiewood-pkgs](https://roojs.github.io/pixiewood-pkgs/release.pins). OLLMchat unpacks that row into the same sysroot and drops the `webkitgtk-android` wrap. Copy Java from `share/pixiewood/webkitgtk-android-java` into the app Java tree (same files as `install-webview-java.sh`).
+After a tag, the pin list is the `release.pins` asset on the GitHub Release and at `https://roojs.github.io/webkitgtk-android/release.pins`. It is not a file in this repository. The `repo` field is the GTK checkout URL, so the row survives a pin list merged with [pixiewood-pkgs](https://roojs.github.io/pixiewood-pkgs/release.pins). OLLMchat unpacks that row into the same sysroot and drops the `webkitgtk-android` wrap. Copy Java from `share/pixiewood/webkitgtk-android-java` into the app Java tree (same files as `install-webview-java.sh`).
 
 **Valadoc (Linux, no Android):**
 

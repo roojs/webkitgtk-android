@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pack the Android library this build installed into one .pixie file and
-# write release.pins for it. A version tag uploads the file and publishes
-# the pin list.
+# write release.pins next to it. A version tag uploads both as release
+# assets. The pin file is not committed.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
