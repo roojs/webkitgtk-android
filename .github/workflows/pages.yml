@@ -1,0 +1,66 @@
+name: Pin page
+
+# The github-pages environment allows deployments from main. A version tag
+# commits release.pins here, and this workflow publishes that file.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - release.pins
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: webkitgtk-android-github-pages
+  cancel-in-progress: false
+
+jobs:
+  stage-pins:
+    name: Stage pin page
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Stage the pin page
+        run: |
+          set -euo pipefail
+          test -f release.pins
+          mkdir -p site
+          cp release.pins site/release.pins
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>webkitgtk-android</title>
+          </head>
+          <body>
+            <h1>webkitgtk-android</h1>
+            <p><a href="release.pins"><code>release.pins</code></a> names the Android <code>.pixie</code> library. <a href="https://github.com/roojs/pixie-pkg">pixie-pkg</a> reads that file and installs it.</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy-pins:
+    name: Publish pin page
+    needs: stage-pins
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

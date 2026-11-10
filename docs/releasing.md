@@ -27,7 +27,7 @@ Pushing `vX.Y.Z` triggers [`.github/workflows/release.yml`](../.github/workflows
 - publishes the tarball, checksum, and notes as the GitHub Release
 - cross-compiles `libwebkitgtk-android-1` against the published pixie sysroot ([`scripts/android/build-pixie.sh`](../scripts/android/build-pixie.sh))
 - attaches `webkitgtk-android-arm-v31-X.Y.Z.pixie` and `release.pins` to that release
-- commits `release.pins` on `main` and deploys it to `https://roojs.github.io/webkitgtk-android/release.pins`
+- commits `release.pins` on `main`. That push runs [`.github/workflows/pages.yml`](../.github/workflows/pages.yml), which deploys `https://roojs.github.io/webkitgtk-android/release.pins`. The tag job does not deploy: the `github-pages` environment only allows `main`.
 
 `workflow_dispatch` builds the tarball and the `.pixie` without publishing.
 
