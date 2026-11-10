@@ -20,6 +20,18 @@ namespace WebKitGtkAndroid
 		public bool enable_javascript { get; set; default = true; }
 		public bool enable_developer_extras { get; set; default = false; }
 
+		/**
+		 * WebKit-shaped — whether page JS sees navigator.webdriver on automation.
+		 * Default AUTO (stock). DISABLED is opt-in; Android host is a no-op
+		 * (no WebView2-style blink boot args; stock System WebView already
+		 * reports navigator.webdriver === false under CDP).
+		 */
+		public NavigatorWebDriverActivePolicy navigator_webdriver_active_policy {
+			get;
+			set;
+			default = NavigatorWebDriverActivePolicy.AUTO;
+		}
+
 		public WebViewSettings ()
 		{
 		}

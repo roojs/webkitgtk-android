@@ -12,6 +12,8 @@ extern jclass wka_get_host_class (void);
 
 static jclass wka_cdp_cls = NULL;
 static gboolean wka_automation_allowed = FALSE;
+/* 0=AUTO, 1=ENABLED, 2=DISABLED — match NavigatorWebDriverActivePolicy */
+static int g_navigator_webdriver_policy = 0;
 
 static jclass
 wka_cdp_class (JNIEnv *env)
@@ -143,6 +145,16 @@ gboolean
 wka_host_get_automation_allowed (void)
 {
 	return wka_automation_allowed;
+}
+
+void
+wka_host_set_navigator_webdriver_active_policy (int policy)
+{
+	g_navigator_webdriver_policy = policy;
+	if (policy == 2) { /* DISABLED */
+		__android_log_print (ANDROID_LOG_INFO, WKA_CDP_LOG_TAG,
+			"navigator_webdriver_active_policy=DISABLED stored (no-op: System WebView has no AutomationControlled blink switch)");
+	}
 }
 
 gboolean
