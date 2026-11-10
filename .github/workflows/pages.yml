@@ -1,7 +1,8 @@
 name: Pin page
 
-# Publish release.pins from the GitHub Release. The file is not stored in git.
-# This workflow runs on main, which is the branch the github-pages environment allows.
+# Publish release.pins from the Release workflow's build. The file is not
+# stored in git and is not a GitHub Release asset. This workflow runs on
+# main, which is the branch the github-pages environment allows.
 
 on:
   workflow_run:
@@ -10,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -24,19 +26,37 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     steps:
-      - name: Download release.pins from the GitHub Release
+      - name: Choose the Release run
+        id: run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p site
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            tag="${{ github.event.workflow_run.head_branch }}"
-            gh release download "$tag" --repo "${{ github.repository }}" --pattern release.pins --dir site
-          else
-            gh release download --repo "${{ github.repository }}" --pattern release.pins --dir site
+            echo "id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          test -f site/release.pins
+          id="$(gh run list --workflow release.yml --limit 30 --json databaseId,headBranch,conclusion \
+            --jq '[.[] | select(.conclusion=="success" and (.headBranch|startswith("v")))][0].databaseId')"
+          if [ -z "$id" ] || [ "$id" = "null" ]; then
+            echo "No successful version-tag Release run to publish" >&2
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Download release.pins from that build
+        uses: actions/download-artifact@v5
+        with:
+          name: webkitgtk-android-pixie
+          path: pins
+          run-id: ${{ steps.run.outputs.id }}
+          github-token: ${{ github.token }}
+
+      - name: Stage release.pins
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp pins/release.pins site/release.pins
           cat > site/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">

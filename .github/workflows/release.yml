@@ -137,7 +137,7 @@ jobs:
             echo "${pixie_url}"
             echo "\`\`\`"
             echo
-            echo "The pin list is the \`release.pins\` asset on this release and [GitHub Pages](https://roojs.github.io/webkitgtk-android/release.pins)."
+            echo "The pin list is [GitHub Pages](https://roojs.github.io/webkitgtk-android/release.pins)."
           } >> release-notes.md
 
       - name: Publish release assets
@@ -148,5 +148,4 @@ jobs:
             artifacts/*.tar.gz
             artifacts/*.sha256
             artifacts/*.pixie
-            artifacts/release.pins
           overwrite_files: true

@@ -26,8 +26,8 @@ Pushing `vX.Y.Z` triggers [`.github/workflows/release.yml`](../.github/workflows
 - appends a Meson `wrap-file` pin (`source_url` + `source_hash`) to the notes
 - publishes the tarball, checksum, and notes as the GitHub Release
 - cross-compiles `libwebkitgtk-android-1` against the published pixie sysroot ([`scripts/android/build-pixie.sh`](../scripts/android/build-pixie.sh))
-- attaches `webkitgtk-android-arm-v31-X.Y.Z.pixie` and `release.pins` to that release. `release.pins` is not committed
-- [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) then deploys that release asset to `https://roojs.github.io/webkitgtk-android/release.pins`. It runs on `main`, which is the branch the `github-pages` environment allows
+- attaches `webkitgtk-android-arm-v31-X.Y.Z.pixie` to that release
+- [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) publishes `release.pins` to `https://roojs.github.io/webkitgtk-android/release.pins`. That file is not committed and is not a release asset. The page workflow runs on `main`, which is the branch the `github-pages` environment allows
 
 `workflow_dispatch` builds the tarball and the `.pixie` without publishing.
 

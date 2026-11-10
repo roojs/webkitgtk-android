@@ -21,7 +21,7 @@ build-docs/
 .cdp-spike-build.log
 
 # Release tarballs (scripts/release.sh / CI) and packed .pixie files.
-# release.pins is a release asset, not a file in git.
+# release.pins is published on GitHub Pages, not stored in git.
 dist/
 pixie-artifacts/
 /release.pins

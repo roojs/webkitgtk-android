@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Android pixie package `webkitgtk-android-arm-v31-<version>.pixie` on version tags, with `release.pins` on the GitHub Release and GitHub Pages, so a consumer can install the library instead of compiling this tree.
+- Android pixie package `webkitgtk-android-arm-v31-<version>.pixie` on version tags. `release.pins` is published only at GitHub Pages, so a consumer can install the library instead of compiling this tree.
 
 ## [0.1.5] - 2026-09-02
 
