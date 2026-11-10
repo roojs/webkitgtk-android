@@ -20,8 +20,9 @@ build-docs/
 .automation-build.log
 .cdp-spike-build.log
 
-# Release tarballs (scripts/release.sh / CI)
+# Release tarballs (scripts/release.sh / CI) and packed .pixie files
 dist/
+pixie-artifacts/
 
 # Meson / editor
 .cache/

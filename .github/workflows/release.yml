@@ -1,7 +1,7 @@
 name: Release
 
-# Source tarball for Meson wrap-file. Tag push (v*) publishes a GitHub Release.
-# workflow_dispatch builds the tarball without publishing.
+# Tag push (v*) publishes a GitHub Release: the Meson wrap-file tarball and
+# the Android .pixie library. workflow_dispatch builds both without publishing.
 
 on:
   push:
@@ -43,45 +43,182 @@ jobs:
           echo "SHA256 ${hash}"
           ls -lh dist
 
-      - name: Render release notes from CHANGELOG.md
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          VER: ${{ steps.dist.outputs.ver }}
-          TARBALL: ${{ steps.dist.outputs.tarball }}
-          HASH: ${{ steps.dist.outputs.hash }}
+      - name: Upload source tarball
+        uses: actions/upload-artifact@v5
+        with:
+          name: webkitgtk-android-dist
+          path: dist/*
+
+  pixie:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install host build tools
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            git \
+            jq \
+            ninja-build \
+            pkg-config \
+            python3 \
+            unzip \
+            valac \
+            xz-utils \
+            libglib2.0-dev \
+            libgtk-4-dev \
+            libsoup-3.0-dev
+
+      - name: Build and pack the Android library
+        run: scripts/android/build-pixie.sh
+
+      - name: Upload pixie artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: webkitgtk-android-pixie
+          path: pixie-artifacts/*
+          if-no-files-found: error
+
+  publish:
+    needs: [tarball, pixie]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          merge-multiple: true
+          pattern: webkitgtk-android-*
+
+      - name: Render release notes
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF#refs/tags/v}"
+          tarball="webkitgtk-android-${ver}.tar.gz"
+          hash="$(awk '{ print $1 }' "artifacts/${tarball}.sha256")"
+          pixie="$(find artifacts -maxdepth 1 -name 'webkitgtk-android-arm-v*.pixie' -printf '%f\n')"
+          if [[ -z "${hash}" || -z "${pixie}" ]]; then
+            echo "missing tarball hash or pixie asset" >&2
+            ls -l artifacts >&2
+            exit 1
+          fi
           chmod +x scripts/release/changelog.sh
           scripts/release/changelog.sh release-notes "${GITHUB_REF#refs/tags/}" -o release-notes.md
-          asset_url="https://github.com/roojs/webkitgtk-android/releases/download/v${VER}/${TARBALL}"
+          asset_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${ver}/${tarball}"
+          pixie_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${ver}/${pixie}"
           {
             echo
             echo "## Wrap pin"
             echo
             echo '```ini'
             echo '[wrap-file]'
-            echo "directory = webkitgtk-android-${VER}"
+            echo "directory = webkitgtk-android-${ver}"
             echo "source_url = ${asset_url}"
-            echo "source_filename = ${TARBALL}"
-            echo "source_hash = ${HASH}"
+            echo "source_filename = ${tarball}"
+            echo "source_hash = ${hash}"
             echo
             echo '[provide]'
             echo 'dependency_names = webkitgtk-android-1'
             echo '```'
+            echo
+            echo "## Pixie"
+            echo
+            echo "Android library: \`${pixie}\`"
+            echo
+            echo "\`\`\`"
+            echo "${pixie_url}"
+            echo "\`\`\`"
+            echo
+            echo "The pin list is [\`release.pins\`](https://github.com/${GITHUB_REPOSITORY}/blob/main/release.pins) on \`main\` and [GitHub Pages](https://roojs.github.io/webkitgtk-android/release.pins)."
           } >> release-notes.md
-          echo "---- release-notes.md ----"
-          cat release-notes.md
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: webkitgtk-android-dist
-          path: dist/*
 
       - name: Publish release assets
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
-          files: dist/*
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.sha256
+            artifacts/*.pixie
+            artifacts/release.pins
           overwrite_files: true
+
+      - name: Commit release.pins on main
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          cp artifacts/release.pins release.pins
+          git add release.pins
+          git diff --staged --quiet && exit 0
+          git commit -m "Publish the Android pixie pin for ${GITHUB_REF_NAME}"
+          git push origin HEAD:main
+
+  stage-pins:
+    name: Stage pin page
+    needs: publish
+    if: needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Download pixie pins
+        uses: actions/download-artifact@v5
+        with:
+          name: webkitgtk-android-pixie
+          path: pins
+
+      - name: Stage the pin page
+        run: |
+          set -euo pipefail
+          mkdir -p site
+          cp pins/release.pins site/release.pins
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>webkitgtk-android</title>
+          </head>
+          <body>
+            <h1>webkitgtk-android</h1>
+            <p><a href="release.pins"><code>release.pins</code></a> names the Android <code>.pixie</code> library. <a href="https://github.com/roojs/pixie-pkg">pixie-pkg</a> reads that file and installs it.</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy-pins:
+    name: Publish pin page
+    needs: stage-pins
+    if: needs.stage-pins.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: webkitgtk-android-github-pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

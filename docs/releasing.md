@@ -1,6 +1,6 @@
 # Releasing
 
-This repo's release flow is **tag-driven**. The artifact is a **source tarball** (Meson wrap-file), not a prebuilt `.so` or APK.
+This repo's release flow is **tag-driven**. The artifacts are a **source tarball** (Meson wrap-file) and a prebuilt Android **`.pixie`** library.
 
 ## What `scripts/release.sh` does
 
@@ -25,8 +25,11 @@ Pushing `vX.Y.Z` triggers [`.github/workflows/release.yml`](../.github/workflows
 - renders `release-notes.md` from the matching `CHANGELOG.md` section
 - appends a Meson `wrap-file` pin (`source_url` + `source_hash`) to the notes
 - publishes the tarball, checksum, and notes as the GitHub Release
+- cross-compiles `libwebkitgtk-android-1` against the published pixie sysroot ([`scripts/android/build-pixie.sh`](../scripts/android/build-pixie.sh))
+- attaches `webkitgtk-android-arm-v31-X.Y.Z.pixie` and `release.pins` to that release
+- commits `release.pins` on `main` and deploys it to `https://roojs.github.io/webkitgtk-android/release.pins`
 
-`workflow_dispatch` builds the tarball without publishing.
+`workflow_dispatch` builds the tarball and the `.pixie` without publishing.
 
 GitHub's auto-generated “Source code” archives are **not** the pin — their hashes are not stable. Use the attached `webkitgtk-android-*.tar.gz`.
 

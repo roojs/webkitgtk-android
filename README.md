@@ -25,7 +25,7 @@ web.load_uri ("https://roojs.com/");
 - **Downloads ✔️** — engine API (see [`docs/plans/1.1-downloads.md`](docs/plans/1.1-downloads.md))
 - **Packaging ✔️** — `libwebkitgtk-android-1` + pkg-config / VAPI (see [`docs/android-build.md`](docs/android-build.md))
 - **Automation ✔️** — WebKitGTK-shaped setup API + CDP bridge ([plan 1.4](docs/plans/1.4-android-automation-parity.md)); fill/press stays in the consumer
-- **Releases** — tag-driven source `.tar.gz` via GitHub Actions ([`docs/releasing.md`](docs/releasing.md), [`CHANGELOG.md`](CHANGELOG.md))
+- **Releases** — tag-driven source `.tar.gz` and Android `.pixie` via GitHub Actions ([`docs/releasing.md`](docs/releasing.md), [`CHANGELOG.md`](CHANGELOG.md))
 
 | Doc | |
 |-----|--|

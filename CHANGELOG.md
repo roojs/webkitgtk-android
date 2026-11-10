@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.1.4] - Unreleased
+## [0.1.5] - Unreleased
+
+### Added
+
+- Android pixie package `webkitgtk-android-arm-v31-<version>.pixie` on version tags, with `release.pins` on `main` and GitHub Pages, so a consumer can install the library instead of compiling this tree.
+
+## [0.1.4] - 2026-08-31
 
 ### Added
 

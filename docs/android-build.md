@@ -42,6 +42,24 @@ That copies `org.roojs.webkitgtk.android.WebViewHost` (+ a11y / download / freez
 
 **Prefix install:** `meson install` also stages `webkitgtk-android-1.pc`, `vapi/webkitgtk-android-1.vapi`, and `webkitgtk-android-host-api.h`. Pixiewood APK builds often install **runtime `.so` only**; use a subproject (or a full prefix + `PKG_CONFIG_PATH`) for compiling consumers.
 
+## Pixie package
+
+A version tag also publishes one prebuilt Android library, so a consumer can install it instead of compiling this tree:
+
+```text
+webkitgtk-android-arm-v31-<version>.pixie
+```
+
+The archive contains `libwebkitgtk-android-1.so`, `webkitgtk-android-1.pc`, the VAPI, the host headers, and the Java sources under `share/pixiewood/webkitgtk-android-java`. Build it locally with:
+
+```bash
+./scripts/android/build-pixie.sh
+```
+
+That fetches the published GTK stack (GTK itself is the IME package in `android/pixie-gtk.pins`), compiles this library, and writes `pixie-artifacts/`. Host tools required: `valac`, `ninja`, `pkg-config`, `jq`, and the Vala bindings from `libgtk-4-dev`, `libsoup-3.0-dev`, and `libglib2.0-dev`.
+
+After a tag, the pin list is `release.pins` on `main` and at `https://roojs.github.io/webkitgtk-android/release.pins`. The `repo` field is the GTK checkout URL, so the row survives a pin list merged with [pixiewood-pkgs](https://roojs.github.io/pixiewood-pkgs/release.pins). OLLMchat unpacks that row into the same sysroot and drops the `webkitgtk-android` wrap. Copy Java from `share/pixiewood/webkitgtk-android-java` into the app Java tree (same files as `install-webview-java.sh`).
+
 **Valadoc (Linux, no Android):**
 
 ```bash
