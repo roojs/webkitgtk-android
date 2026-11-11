@@ -3,6 +3,7 @@
 Written for **AI agents** — **mandatory** when an agent drafts, reviews, or implements from **`docs/plans/*`**.
 
 Plan markdown lives in **`docs/plans/`**; completed work archives under **`docs/plans/done/`**.
+Bug reports live in **`docs/bugs/`**; completed reports archive under **`docs/bugs/done/`**.
 
 This repo is small. For the full checklist, emoji legend, edit-syntax contract, and Vala coding rules, treat the OLLMchat copy as canonical:
 

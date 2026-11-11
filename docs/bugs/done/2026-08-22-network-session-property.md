@@ -2,7 +2,7 @@
 
 **Status:** ✔️ library property applied; OLLMchat wrap bump ⏳ — await user ✅
 
-**Related:** plan [`1.1-downloads.md`](../plans/1.1-downloads.md); webview2-gtk `WebView.network_session { get; construct; }`; OLLMchat `libocwebkit/Browser.vala` currently calls the getter so Android valac compiles against this wrap.
+**Related:** plan [`1.1-downloads.md`](../../plans/1.1-downloads.md); webview2-gtk `WebView.network_session { get; construct; }`; OLLMchat `libocwebkit/Browser.vala` currently calls the getter so Android valac compiles against this wrap.
 
 ## Problem
 

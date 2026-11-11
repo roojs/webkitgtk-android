@@ -12,7 +12,7 @@
 - ℹ️ Windows docs: [webview2-gtk `docs/automation.md` — Hiding `navigator.webdriver`](file:///home/alan/git/webview2-gtk/docs/automation.md)
 - ℹ️ Linux twin: [webkitgtk-automation README — Hiding `navigator.webdriver`](https://github.com/roojs/webkitgtk-automation#hiding-navigatorwebdriver-automation-flag)
 - ℹ️ Upstream WebKit: [#165269](https://bugs.webkit.org/show_bug.cgi?id=165269)
-- ℹ️ Automation setup already on Android: [`docs/plans/1.4-android-automation-parity.md`](../plans/1.4-android-automation-parity.md)
+- ℹ️ Automation setup already on Android: [`docs/plans/1.4-android-automation-parity.md`](../../plans/1.4-android-automation-parity.md)
 
 ---
 

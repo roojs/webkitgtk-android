@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.1.6] - Unreleased
+## [0.1.7] - Unreleased
+
+### Fixed
+
+- `AndroidAtspi.refresh_async` is declared in the published `webkitgtk-android-1.vapi`, so pixie consumers can `yield refresh_async()` before `get_desktop()` ([bug](docs/bugs/done/2026-11-11-refresh-async-missing-from-vapi.md)).
+
+## [0.1.6] - 2026-11-10
 
 ### Added
 
@@ -20,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`navigator_webdriver_active_policy`) — WebKit / webview2-gtk shaped API
   parity; host stores policy (DISABLED is a no-op — System WebView has no
   AutomationControlled blink switch; page JS already sees `false` under CDP)
-  ([bug](docs/bugs/2026-09-02-navigator-webdriver-active-policy.md)).
+  ([bug](docs/bugs/done/2026-09-02-navigator-webdriver-active-policy.md)).
 
 ## [0.1.4] - 2026-08-31
 
@@ -43,9 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `WebView.network_session` is a WebKitGTK-shaped `{ get; construct; }` property (handwritten `get_network_session()` only broke `.network_session` in consumers) ([bug](docs/bugs/2026-08-22-network-session-property.md)).
-- A11y walk on the GTK thread deadlocked Android `main` (ANR); walk is async ([bug](docs/bugs/2026-07-23-a11y-walk-gtk-thread-anr.md)).
-- Off-screen / unfocused WebView a11y tree was empty until force-on ([bug](docs/bugs/2026-07-23-offscreen-a11y-empty-tree.md)).
+- `WebView.network_session` is a WebKitGTK-shaped `{ get; construct; }` property (handwritten `get_network_session()` only broke `.network_session` in consumers) ([bug](docs/bugs/done/2026-08-22-network-session-property.md)).
+- A11y walk on the GTK thread deadlocked Android `main` (ANR); walk is async ([bug](docs/bugs/done/2026-07-23-a11y-walk-gtk-thread-anr.md)).
+- Off-screen / unfocused WebView a11y tree was empty until force-on ([bug](docs/bugs/done/2026-07-23-offscreen-a11y-empty-tree.md)).
 
 ## [0.1.2] - 2026-07-22
 

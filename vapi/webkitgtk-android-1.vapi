@@ -251,6 +251,7 @@ namespace AndroidAtspi {
 
 	public static void init ();
 	public static Accessible get_desktop (int index);
+	public static async void refresh_async () throws GLib.Error;
 	public static void register_webview (WebKitGtkAndroid.WebView web);
 	public static void generate_keyboard_event (long keyval, string? keystring, KeySynthType synth);
 }

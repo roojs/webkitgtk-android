@@ -2,7 +2,7 @@
 
 **Status:** ✅ fixed — PixelCopy + nav-bottom crop + 2px top trim; debug probes removed.
 
-**Related:** [`docs/freeze.md`](../freeze.md), plan § Modal freeze
+**Related:** [`docs/freeze.md`](../../freeze.md), plan § Modal freeze
 
 ## Problem
 

@@ -2,7 +2,7 @@
 
 **Status:** ✔️ async walk applied in library; OLLMchat wire ✔️ (`libocwebkit/A11y.vala`) — await device ✅
 
-**Related:** [`docs/a11y.md`](../a11y.md) (caller contract), plan Phase 3 a11y; sibling symptom [`2026-07-23-offscreen-a11y-empty-tree.md`](2026-07-23-offscreen-a11y-empty-tree.md); OLLMchat [`docs/bugs/2026-07-23-android-a11y-refresh-async.md`](../../../docs/bugs/2026-07-23-android-a11y-refresh-async.md)
+**Related:** [`docs/a11y.md`](../../a11y.md) (caller contract), plan Phase 3 a11y; sibling symptom [`2026-07-23-offscreen-a11y-empty-tree.md`](2026-07-23-offscreen-a11y-empty-tree.md); OLLMchat [`docs/bugs/2026-07-23-android-a11y-refresh-async.md`](../../../../docs/bugs/2026-07-23-android-a11y-refresh-async.md)
 
 ## Problem
 
@@ -132,7 +132,7 @@ Linux worker avoids **AT-SPI ↔ GTK main** deadlock. Android needs collect on *
 
 ### Caller API (library)
 
-Documented in [`docs/a11y.md`](../a11y.md):
+Documented in [`docs/a11y.md`](../../a11y.md):
 
 - **From GLib/GTK:** `wka_host_a11y_walk_foreach_async` or `AndroidAtspi.refresh_async()` only.
 - **Sync** `wka_host_a11y_walk` / `walk_foreach` / `AndroidAtspi.ensure_tree`: safe only on Android UI; from GTK they refuse / empty (ANR guard).

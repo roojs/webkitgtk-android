@@ -2,8 +2,8 @@
 
 **Status:** ✔️ agent fix — park-not-INVISIBLE; device A/B on Gemini parked dump = 74 nodes (non-empty). Awaiting user **✅**.
 
-**Related:** [`docs/a11y.md`](../a11y.md), plan § Research notes — *Background browse → 0×0 “screen”* / *CF / overlays vs a11y*  
-([`docs/plans/1.0-ACTIVE-webkitgtk-android.md`](../plans/1.0-ACTIVE-webkitgtk-android.md))
+**Related:** [`docs/a11y.md`](../../a11y.md), plan § Research notes — *Background browse → 0×0 “screen”* / *CF / overlays vs a11y*  
+([`docs/plans/1.0-ACTIVE-webkitgtk-android.md`](../../plans/1.0-ACTIVE-webkitgtk-android.md))
 
 ## Problem
 

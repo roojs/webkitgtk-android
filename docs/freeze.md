@@ -15,4 +15,4 @@ WebView margins come from `wka_widget_bounds_xywh` using **float** `gdk_surface_
 
 **Auto only** — apps present dialogs; the WebView monitor freezes.
 
-Related history: [`docs/bugs/2026-07-21-modal-freeze-lags-dialog.md`](bugs/2026-07-21-modal-freeze-lags-dialog.md).
+Related history: [`docs/bugs/done/2026-07-21-modal-freeze-lags-dialog.md`](bugs/done/2026-07-21-modal-freeze-lags-dialog.md).
